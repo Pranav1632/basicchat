@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "ai/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Send,
   Square,
@@ -11,12 +11,16 @@ import {
   MessageSquare,
   Settings,
   LogOut,
+  AlertTriangle,
 } from "lucide-react";
 import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import Link from "next/link";
 
 export default function ChatPage() {
+  const [activeProvider, setActiveProvider] = useState<string>("gemini-2.5-flash");
+  const [usedFallback, setUsedFallback] = useState(false);
+
   const {
     messages,
     input,
@@ -27,6 +31,13 @@ export default function ChatPage() {
     error,
   } = useChat({
     api: "/api/chat",
+    onResponse(response) {
+      const provider = response.headers.get("X-AI-Provider");
+      if (provider) {
+        setActiveProvider(provider);
+        setUsedFallback(provider.includes("nvidia") || provider.includes("llama"));
+      }
+    },
   });
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -92,7 +103,14 @@ export default function ChatPage() {
           <div className="chat-top-info">
             <div className="chat-agent-dot" />
             <span className="chat-agent-name">AI Assistant</span>
-            <span className="chat-model-badge">gpt-4o-mini</span>
+            <span
+              className="chat-model-badge"
+              style={usedFallback ? { background: "rgba(251,146,60,0.12)", color: "#fb923c", borderColor: "rgba(251,146,60,0.3)" } : {}}
+              title={usedFallback ? "Gemini rate limit hit — using NVIDIA fallback" : "Primary model"}
+            >
+              {usedFallback && <AlertTriangle size={10} style={{ marginRight: 3 }} />}
+              {activeProvider}
+            </span>
           </div>
         </header>
 
