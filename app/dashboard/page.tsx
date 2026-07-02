@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getDashboardStats } from "@/lib/supabase/db";
 import { signOut } from "@/actions/auth";
 import {
   Bot,
@@ -31,6 +32,8 @@ export default async function DashboardPage() {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+
+  const stats = await getDashboardStats(user.id);
 
   return (
     <div className="dashboard-layout">
@@ -131,19 +134,19 @@ export default async function DashboardPage() {
           <div className="stats-grid">
             <div className="stat-card">
               <p className="stat-label">Total Chats</p>
-              <p className="stat-value">0</p>
+              <p className="stat-value">{stats.totalChats}</p>
             </div>
             <div className="stat-card">
               <p className="stat-label">Agents Created</p>
-              <p className="stat-value">0</p>
+              <p className="stat-value">{stats.totalAgents}</p>
             </div>
             <div className="stat-card">
               <p className="stat-label">Documents</p>
-              <p className="stat-value">0</p>
+              <p className="stat-value">{stats.totalDocuments}</p>
             </div>
             <div className="stat-card">
               <p className="stat-label">Messages Sent</p>
-              <p className="stat-value">0</p>
+              <p className="stat-value">{stats.totalMessages}</p>
             </div>
           </div>
         </section>

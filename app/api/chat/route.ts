@@ -1,14 +1,28 @@
-import { NextResponse } from "next/server";
+import { openai } from "@ai-sdk/openai";
+import { streamText } from "ai";
+import { createClient } from "@/lib/supabase/server";
+
+export const runtime = "edge";
 
 export async function POST(req: Request) {
-  const body = await req.json();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const message = body.message;
+  if (!user) {
+    return new Response("Unauthorized", { status: 401 });
+  }
 
-  // Simulate thinking time
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const { messages, systemPrompt, model = "gpt-4o-mini" } = await req.json();
 
-  return NextResponse.json({
-    response: `You said: ${message}`,
+  const result = streamText({
+    model: openai(model),
+    system:
+      systemPrompt ??
+      "You are a helpful AI assistant. Be concise, clear, and friendly.",
+    messages,
   });
+
+  return result.toDataStreamResponse();
 }
