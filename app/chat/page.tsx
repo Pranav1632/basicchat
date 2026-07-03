@@ -2,6 +2,8 @@
 
 import { useChat } from "ai/react";
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { fetchChatMessages } from "@/actions/chat";
 import {
   Send,
   Square,
@@ -18,11 +20,18 @@ import TypingIndicator from "@/components/chat/TypingIndicator";
 import Link from "next/link";
 
 export default function ChatPage() {
+  const searchParams = useSearchParams();
+  const initialChatId = searchParams?.get("id") || "";
+  const agentId = searchParams?.get("agentId") || "";
+  
   const [activeProvider, setActiveProvider] = useState<string>("gemini-2.5-flash");
   const [usedFallback, setUsedFallback] = useState(false);
+  const [chatId, setChatId] = useState<string>(initialChatId);
+  const [isInitializing, setIsInitializing] = useState(!!initialChatId);
 
   const {
     messages,
+    setMessages,
     input,
     handleInputChange,
     handleSubmit,
@@ -31,14 +40,38 @@ export default function ChatPage() {
     error,
   } = useChat({
     api: "/api/chat",
+    body: { chatId, agentId },
     onResponse(response) {
       const provider = response.headers.get("X-AI-Provider");
       if (provider) {
         setActiveProvider(provider);
         setUsedFallback(provider.includes("nvidia") || provider.includes("llama"));
       }
+      const newChatId = response.headers.get("X-Chat-Id");
+      if (newChatId && newChatId !== chatId) {
+        setChatId(newChatId);
+        window.history.replaceState(null, "", `/chat?id=${newChatId}`);
+      }
     },
   });
+
+  // Load initial messages if opening an existing chat
+  useEffect(() => {
+    if (initialChatId) {
+      fetchChatMessages(initialChatId)
+        .then((dbMessages) => {
+          setMessages(
+            dbMessages.map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            }))
+          );
+        })
+        .catch(console.error)
+        .finally(() => setIsInitializing(false));
+    }
+  }, [initialChatId, setMessages]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -116,7 +149,14 @@ export default function ChatPage() {
 
         {/* Messages */}
         <div className="chat-messages">
-          {isEmpty && (
+          {isInitializing ? (
+            <div className="chat-empty">
+              <div className="chat-empty-icon" style={{ animation: "pulse 2s infinite" }}>
+                <Bot size={40} />
+              </div>
+              <h2 className="chat-empty-title">Loading history...</h2>
+            </div>
+          ) : isEmpty ? (
             <div className="chat-empty">
               <div className="chat-empty-icon">
                 <Bot size={40} />
@@ -150,7 +190,7 @@ export default function ChatPage() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
           {messages.map((msg) => (
             <div

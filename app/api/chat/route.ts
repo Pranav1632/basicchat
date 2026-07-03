@@ -1,5 +1,6 @@
 import { LangChainAdapter } from "ai";
 import { createClient } from "@/lib/supabase/server";
+import { getAgents, getAgent, createAgent, createChat, addMessage } from "@/lib/supabase/db";
 import { graph } from "@/lib/ai/graph";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 
@@ -19,8 +20,60 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const { messages, systemPrompt } = await req.json();
-  const system = systemPrompt ?? DEFAULT_SYSTEM;
+  const { messages, systemPrompt, chatId, agentId } = await req.json();
+  let system = systemPrompt ?? DEFAULT_SYSTEM;
+  let provider = "gemini"; // default
+
+  let currentChatId = chatId;
+  let currentAgent = null;
+
+  // 1. Create a chat if it doesn't exist
+  if (!currentChatId) {
+    if (agentId) {
+      currentAgent = await getAgent(agentId);
+    }
+    
+    if (!currentAgent) {
+      const agents = await getAgents(user.id);
+      currentAgent = agents[0];
+    }
+    
+    if (!currentAgent) {
+      currentAgent = await createAgent(user.id, {
+        name: "AI Assistant",
+        model: "gemini-2.0-flash-lite",
+        system_prompt: system,
+        temperature: 0.7,
+        description: "Default AI Assistant",
+      }) as NonNullable<Awaited<ReturnType<typeof createAgent>>>;
+    }
+    
+    if (currentAgent) {
+      const newChat = await createChat(user.id, currentAgent.id, "New Chat");
+      currentChatId = newChat?.id;
+    }
+  } else {
+    // If chat exists, we need to load its agent to use the right model & prompt
+    const { getChat } = await import("@/lib/supabase/db");
+    const chat = await getChat(currentChatId);
+    if (chat && chat.agent) {
+      currentAgent = chat.agent;
+    }
+  }
+
+  // Set the specific agent's prompt and provider
+  if (currentAgent) {
+    system = currentAgent.system_prompt || system;
+    if (currentAgent.model.includes("llama") || currentAgent.model.includes("nvidia")) {
+      provider = "nvidia";
+    }
+  }
+
+  // 2. Save the incoming user message
+  const lastUserMessage = messages[messages.length - 1];
+  if (lastUserMessage && lastUserMessage.role === "user" && currentChatId) {
+    await addMessage(currentChatId, "user", lastUserMessage.content);
+  }
 
   // Convert Vercel AI SDK messages to LangChain messages.
   // ⚠️ Do NOT include SystemMessage here — Gemini rejects it in the messages array.
@@ -34,13 +87,14 @@ export async function POST(req: Request) {
       { messages: langchainMessages },
       {
         version: "v2",
-        configurable: { systemPrompt: system, provider: "gemini" },
+        configurable: { systemPrompt: system, provider },
       }
     );
 
     // Stream only the final assistant text tokens to the frontend
     const readableStream = new ReadableStream<string>({
       async start(controller) {
+        let fullAssistantMessage = ""; // Buffer for the final message
         try {
           let hasStreamed = false;
           for await (const event of stream) {
@@ -50,11 +104,13 @@ export async function POST(req: Request) {
               const content = event.data.chunk.content;
               if (typeof content === "string" && content.length > 0) {
                 hasStreamed = true;
+                fullAssistantMessage += content;
                 controller.enqueue(content);
               }
             } else if (event.event === "on_chat_model_end" && event.data.output) {
               const msg = event.data.output;
               if (!hasStreamed && msg && typeof msg.content === "string" && msg.content.length > 0) {
+                fullAssistantMessage += msg.content;
                 controller.enqueue(msg.content);
               }
             }
@@ -62,6 +118,10 @@ export async function POST(req: Request) {
         } catch (e) {
           controller.error(e);
         } finally {
+          // 3. Save the final AI response
+          if (currentChatId && fullAssistantMessage.length > 0) {
+            await addMessage(currentChatId, "assistant", fullAssistantMessage);
+          }
           controller.close();
         }
       },
@@ -72,7 +132,10 @@ export async function POST(req: Request) {
 
     const headers = new Headers(response.headers);
     headers.set("X-AI-Provider", "langgraph-gemini-2.5-flash");
-    headers.set("Access-Control-Expose-Headers", "X-AI-Provider");
+    headers.set("Access-Control-Expose-Headers", "X-AI-Provider, X-Chat-Id");
+    if (currentChatId) {
+      headers.set("X-Chat-Id", currentChatId);
+    }
 
     return new Response(response.body, { status: response.status, headers });
   } catch (error) {

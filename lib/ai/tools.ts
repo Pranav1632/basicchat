@@ -28,5 +28,44 @@ export const calculatorTool = tool(
   }
 );
 
-// We will add more tools here in the future
-export const tools = [calculatorTool];
+export const wikipediaTool = tool(
+  async ({ query }) => {
+    try {
+      const res = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=&format=json&origin=*`);
+      const data = await res.json();
+      const results = data.query?.search;
+      if (!results || results.length === 0) return "No results found.";
+      return results.slice(0, 3).map((r: { title: string; snippet: string }) => `Title: ${r.title}\nSnippet: ${r.snippet.replace(/<\/?[^>]+(>|$)/g, "")}`).join("\n\n");
+    } catch {
+      return "Failed to search Wikipedia.";
+    }
+  },
+  {
+    name: "wikipedia",
+    description: "Search Wikipedia for information on any topic, person, or historical event.",
+    schema: z.object({
+      query: z.string().describe("The search query."),
+    }),
+  }
+);
+
+export const databaseStatsTool = tool(
+  async ({ userId }) => {
+    try {
+      const { getDashboardStats } = await import("../supabase/db");
+      const stats = await getDashboardStats(userId);
+      return `User Stats:\nTotal Chats: ${stats.totalChats}\nTotal Agents: ${stats.totalAgents}\nTotal Documents: ${stats.totalDocuments}\nTotal Messages: ${stats.totalMessages}`;
+    } catch {
+      return "Failed to retrieve database stats.";
+    }
+  },
+  {
+    name: "database_stats",
+    description: "Retrieves the current usage statistics (chats, messages, agents, documents) for a user from the Supabase database.",
+    schema: z.object({
+      userId: z.string().describe("The ID of the user to get stats for. You should ask the user for this if you don't know it, or use 'default' if running tests."),
+    }),
+  }
+);
+
+export const tools = [calculatorTool, wikipediaTool, databaseStatsTool];
