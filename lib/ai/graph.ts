@@ -1,50 +1,81 @@
 import { MessagesAnnotation, StateGraph, START, END } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenAI } from "@langchain/openai";
+import { SystemMessage } from "@langchain/core/messages";
 import { tools } from "./tools";
-import { getLangChainGeminiModel, getLangChainNvidiaModel } from "./langchain-providers";
 
-// 1. Define the tools node
+// ─── Model factory functions ──────────────────────────────────
+function makeGeminiModel() {
+  return new ChatGoogleGenerativeAI({
+    model: "gemini-2.0-flash-lite", // Quota-friendly, confirmed available, works with tools
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    temperature: 0.7,
+  });
+}
+
+function makeNvidiaModel() {
+  return new ChatOpenAI({
+    model: "meta/llama-3.3-70b-instruct",
+    apiKey: process.env.NVIDIA_API_KEY,          // ✅ correct field name
+    configuration: { baseURL: "https://integrate.api.nvidia.com/v1" },
+    temperature: 0.7,
+  });
+}
+
+// ─── Tool node ────────────────────────────────────────────────
 const toolNode = new ToolNode(tools);
 
-// 2. Define the agent node
-async function callModel(state: typeof MessagesAnnotation.State, config: any) {
+// ─── Agent node ───────────────────────────────────────────────
+async function callModel(
+  state: typeof MessagesAnnotation.State,
+  config: any
+) {
   const { messages } = state;
-  const systemPrompt = config?.configurable?.systemPrompt || "You are a helpful AI assistant. You can use tools to help answer questions.";
-  const provider = config?.configurable?.provider || "gemini";
-  
-  // Select the model based on configuration
-  let model;
-  if (provider === "nvidia") {
-    model = getLangChainNvidiaModel();
-  } else {
-    model = getLangChainGeminiModel();
+  const systemPrompt =
+    config?.configurable?.systemPrompt ??
+    "You are a helpful AI assistant. Be concise, clear, and friendly.";
+  const provider = config?.configurable?.provider ?? "gemini";
+
+  const baseModel =
+    provider === "nvidia" ? makeNvidiaModel() : makeGeminiModel();
+
+  // Bind tools
+  const firstIsSystem = messages[0]?._getType?.() === "system";
+  const fullMessages = firstIsSystem
+    ? messages
+    : [new SystemMessage(systemPrompt), ...messages];
+
+  // Try Gemini first, fall back to NVIDIA on rate limit / quota error
+  let response;
+  try {
+    const gemini = makeGeminiModel().bindTools(tools);
+    response = await gemini.invoke(fullMessages);
+  } catch (err: any) {
+    const is429 =
+      err?.status === 429 ||
+      err?.message?.includes("quota") ||
+      err?.message?.includes("rate limit");
+    if (is429) {
+      console.warn("[AI] Gemini rate limit — using NVIDIA llama-3.3-70b fallback");
+      const nvidia = makeNvidiaModel().bindTools(tools);
+      response = await nvidia.invoke(fullMessages);
+    } else {
+      throw err;
+    }
   }
 
-  // Bind tools to the model
-  const modelWithTools = model.bindTools(tools);
-  
-  // Add system prompt if we have messages and the first isn't a system message
-  // For simplicity, we just pass messages to the model. In production, we'd ensure system prompt is included.
-  const response = await modelWithTools.invoke(messages);
-  
-  // We return a list, because this will get added to the existing list
-  return { messages: [response] };
+  return { messages: [response!] };
 }
 
-// 3. Define the router function
+// ─── Routing ──────────────────────────────────────────────────
 function shouldContinue(state: typeof MessagesAnnotation.State) {
-  const messages = state.messages;
-  const lastMessage = messages[messages.length - 1];
-
-  // If the LLM makes a tool call, then we route to the "tools" node
-  if (lastMessage.additional_kwargs?.tool_calls?.length || (lastMessage as any).tool_calls?.length) {
-    return "tools";
-  }
-  // Otherwise, we stop (reply to the user)
-  return END;
+  const lastMessage = state.messages[state.messages.length - 1];
+  const toolCalls = (lastMessage as any)?.tool_calls;
+  return Array.isArray(toolCalls) && toolCalls.length > 0 ? "tools" : END;
 }
 
-// 4. Build the graph
+// ─── Graph ────────────────────────────────────────────────────
 const workflow = new StateGraph(MessagesAnnotation)
   .addNode("agent", callModel)
   .addNode("tools", toolNode)
@@ -52,5 +83,4 @@ const workflow = new StateGraph(MessagesAnnotation)
   .addConditionalEdges("agent", shouldContinue)
   .addEdge("tools", "agent");
 
-// Compile the graph
 export const graph = workflow.compile();
