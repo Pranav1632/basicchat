@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   // Convert Vercel AI SDK messages to LangChain messages.
   // ⚠️ Do NOT include SystemMessage here — Gemini rejects it in the messages array.
   // We pass the system prompt via the graph's configurable instead (see graph.ts).
-  const langchainMessages = messages.map((m: any) =>
+  const langchainMessages = messages.map((m: { role: string; content: string }) =>
     m.role === "user" ? new HumanMessage(m.content) : new AIMessage(m.content)
   );
 
@@ -42,11 +42,20 @@ export async function POST(req: Request) {
     const readableStream = new ReadableStream<string>({
       async start(controller) {
         try {
+          let hasStreamed = false;
           for await (const event of stream) {
-            if (event.event === "on_chat_model_stream" && event.data.chunk) {
+            if (event.event === "on_chat_model_start") {
+              hasStreamed = false;
+            } else if (event.event === "on_chat_model_stream" && event.data.chunk) {
               const content = event.data.chunk.content;
               if (typeof content === "string" && content.length > 0) {
+                hasStreamed = true;
                 controller.enqueue(content);
+              }
+            } else if (event.event === "on_chat_model_end" && event.data.output) {
+              const msg = event.data.output;
+              if (!hasStreamed && msg && typeof msg.content === "string" && msg.content.length > 0) {
+                controller.enqueue(msg.content);
               }
             }
           }
