@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "ai/react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { fetchChatMessages } from "@/actions/chat";
 import {
@@ -19,7 +19,7 @@ import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import Link from "next/link";
 
-export default function ChatPage() {
+function ChatPageContent() {
   const searchParams = useSearchParams();
   const initialChatId = searchParams?.get("id") || "";
   const agentId = searchParams?.get("agentId") || "";
@@ -268,5 +268,13 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChatPageContent />
+    </Suspense>
   );
 }

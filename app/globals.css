@@ -1173,6 +1173,10 @@
   color: var(--foreground);
 }
 
+.agent-chat-link:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
 .chat-model-badge {
   font-size: 0.7rem;
   font-weight: 500;

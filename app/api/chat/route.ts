@@ -10,6 +10,29 @@ export const runtime = "nodejs";
 const DEFAULT_SYSTEM =
   "You are a helpful AI assistant. You have access to tools. Be concise, clear, and friendly. Format your responses using Markdown where appropriate.";
 
+function extractTextContent(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+        if (part && typeof part === "object" && "text" in part) {
+          const text = (part as { text?: unknown }).text;
+          return typeof text === "string" ? text : "";
+        }
+        return "";
+      })
+      .join("");
+  }
+
+  return "";
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -64,7 +87,11 @@ export async function POST(req: Request) {
   // Set the specific agent's prompt and provider
   if (currentAgent) {
     system = currentAgent.system_prompt || system;
-    if (currentAgent.model.includes("llama") || currentAgent.model.includes("nvidia")) {
+    if (
+      currentAgent.model.includes("llama") || 
+      currentAgent.model.includes("nvidia") || 
+      currentAgent.model.includes("gemma")
+    ) {
       provider = "nvidia";
     }
   }
@@ -101,17 +128,18 @@ export async function POST(req: Request) {
             if (event.event === "on_chat_model_start") {
               hasStreamed = false;
             } else if (event.event === "on_chat_model_stream" && event.data.chunk) {
-              const content = event.data.chunk.content;
-              if (typeof content === "string" && content.length > 0) {
+              const content = extractTextContent(event.data.chunk.content);
+              if (content.length > 0) {
                 hasStreamed = true;
                 fullAssistantMessage += content;
                 controller.enqueue(content);
               }
             } else if (event.event === "on_chat_model_end" && event.data.output) {
               const msg = event.data.output;
-              if (!hasStreamed && msg && typeof msg.content === "string" && msg.content.length > 0) {
-                fullAssistantMessage += msg.content;
-                controller.enqueue(msg.content);
+              const content = extractTextContent(msg?.content);
+              if (!hasStreamed && content.length > 0) {
+                fullAssistantMessage += content;
+                controller.enqueue(content);
               }
             }
           }
@@ -131,7 +159,12 @@ export async function POST(req: Request) {
     const response = LangChainAdapter.toDataStreamResponse(readableStream);
 
     const headers = new Headers(response.headers);
-    headers.set("X-AI-Provider", "langgraph-gemini-2.5-flash");
+    headers.set(
+      "X-AI-Provider",
+      provider === "nvidia"
+        ? "langgraph-nvidia-llama-3.3-70b"
+        : "langgraph-gemini-2.0-flash-lite-auto-fallback"
+    );
     headers.set("Access-Control-Expose-Headers", "X-AI-Provider, X-Chat-Id");
     if (currentChatId) {
       headers.set("X-Chat-Id", currentChatId);

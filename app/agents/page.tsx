@@ -90,6 +90,7 @@ export default async function AgentsPage() {
                 
                 <Link 
                   href={`/chat?agentId=${agent.id}`}
+                  className="agent-chat-link"
                   style={{ 
                     display: "block", 
                     textAlign: "center", 
@@ -101,8 +102,6 @@ export default async function AgentsPage() {
                     fontWeight: "500",
                     transition: "background 0.2s"
                   }}
-                  onMouseOver={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.15)"}
-                  onMouseOut={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
                 >
                   Chat with {agent.name}
                 </Link>
