@@ -18,7 +18,7 @@ import {
   History,
   X,
 } from "lucide-react";
-import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
+import SmoothMarkdownRenderer from "@/components/chat/SmoothMarkdownRenderer";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import Link from "next/link";
 
@@ -299,7 +299,10 @@ function ChatPageContent() {
               </div>
               <div className="chat-msg-bubble">
                 {msg.role === "assistant" ? (
-                  <MarkdownRenderer content={msg.content} />
+                  <SmoothMarkdownRenderer 
+                    content={msg.content} 
+                    isStreaming={isLoading && msg.id === messages[messages.length - 1].id}
+                  />
                 ) : (
                   <p className="chat-msg-text">{msg.content}</p>
                 )}
