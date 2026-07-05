@@ -97,3 +97,36 @@ export async function signOut() {
     redirect("/login");
   }
 }
+
+export async function signInWithGoogle() {
+  let googleUrl = "";
+  try {
+    const supabase = await createClient();
+    const headersList = await headers();
+    const host = headersList.get("host");
+    const proto = headersList.get("x-forwarded-proto") || "https";
+    const redirectUrl = `${proto}://${host}/auth/callback`;
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: redirectUrl,
+      },
+    });
+
+    if (error) {
+      console.error("[Actions] Google signIn error:", error);
+      throw error;
+    }
+
+    if (data?.url) {
+      googleUrl = data.url;
+    }
+  } catch (error) {
+    console.error("[Actions] Unexpected error in signInWithGoogle:", error);
+  }
+
+  if (googleUrl) {
+    redirect(googleUrl);
+  }
+}
