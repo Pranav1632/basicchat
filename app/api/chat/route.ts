@@ -124,6 +124,9 @@ export async function POST(req: Request) {
       model = currentAgent.model || model;
     }
 
+    // Enforce 1-2 line limit on text responses for all agents (except code/examples)
+    system += "\n\nCRITICAL CONSTRAINT: You must limit all text responses, replies, and explanations to 1 to 2 lines maximum. This limit applies strictly to ordinary text, descriptions, and conversation turns. It does NOT apply to code snippets, code blocks, or markdown code examples.";
+
     // 2. Save the incoming user message
     const lastUserMessage = messages[messages.length - 1];
     if (lastUserMessage && lastUserMessage.role === "user" && currentChatId) {

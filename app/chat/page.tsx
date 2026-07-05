@@ -41,6 +41,13 @@ function ChatPageContent() {
     staleTime: 30000,
   });
 
+  const activeChat = chats.find((c) => c.id === chatId);
+  const activeAgentId = activeChat ? activeChat.agent_id : agentId;
+
+  const filteredChats = activeAgentId
+    ? chats.filter((c) => c.agent_id === activeAgentId)
+    : chats;
+
   // Query for active chat messages
   const { data: dbMessages, isLoading: isFetchingHistory } = useQuery({
     queryKey: ["chat-messages", chatId],
@@ -55,7 +62,11 @@ function ChatPageContent() {
     onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["user-chats"] });
       if (deletedId === chatId) {
-        router.push("/chat");
+        if (activeAgentId) {
+          router.push(`/chat?agentId=${activeAgentId}`);
+        } else {
+          router.push("/chat");
+        }
       }
     },
   });
@@ -87,6 +98,16 @@ function ChatPageContent() {
     onFinish(message) {
       // Invalidate to fetch background-generated chat title
       queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+      
+      // Secondary deferred refetch to account for background title generation delay
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+      }, 2000);
+
+      // Final fallback deferred refetch
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+      }, 5000);
     },
   });
 
@@ -320,7 +341,11 @@ function ChatPageContent() {
           <h3 style={{ fontWeight: "600", fontSize: "1rem", color: "white" }}>Chat History</h3>
           <button
             onClick={() => {
-              router.push("/chat");
+              if (activeAgentId) {
+                router.push(`/chat?agentId=${activeAgentId}`);
+              } else {
+                router.push("/chat");
+              }
             }}
             style={{
               background: "rgba(255,255,255,0.06)",
@@ -348,7 +373,7 @@ function ChatPageContent() {
           flexDirection: "column",
           gap: "0.5rem",
         }}>
-          {chats.length === 0 ? (
+          {filteredChats.length === 0 ? (
             <div style={{
               textAlign: "center",
               color: "rgba(255,255,255,0.4)",
@@ -358,7 +383,7 @@ function ChatPageContent() {
               No recent chats
             </div>
           ) : (
-            chats.map((c) => {
+            filteredChats.map((c) => {
               const isActive = c.id === chatId;
               return (
                 <div
@@ -406,12 +431,6 @@ function ChatPageContent() {
                       }}>
                         {c.title || "Untitled Chat"}
                       </p>
-                      <span style={{
-                        fontSize: "0.7rem",
-                        color: "rgba(255,255,255,0.4)",
-                      }}>
-                        {c.agent?.name || "AI Assistant"}
-                      </span>
                     </div>
                   </div>
 
