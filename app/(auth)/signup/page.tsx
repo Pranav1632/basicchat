@@ -1,16 +1,17 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { signInWithEmail } from "@/actions/auth";
-import { Bot, Mail, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { signUpWithEmailAndPassword } from "@/actions/auth";
+import { Bot, Mail, Lock, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
 export default function SignupPage() {
   const [state, action, pending] = useActionState(
-    signInWithEmail,
+    signUpWithEmailAndPassword,
     undefined
   );
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   return (
     <div className="auth-card">
@@ -25,18 +26,18 @@ export default function SignupPage() {
       <div className="auth-header">
         <h1 className="auth-title">Create your account</h1>
         <p className="auth-subtitle">
-          Enter your email to get started — we&apos;ll send you a magic link
+          Sign up with your email and password
         </p>
       </div>
 
       {state?.success ? (
         <div className="auth-success">
-          <CheckCircle size={20} className="auth-success-icon" />
+          <CheckCircle size={20} className="auth-success-icon" style={{ flexShrink: 0 }} />
           <div>
             <p className="auth-success-title">Check your inbox!</p>
             <p className="auth-success-desc">
-              We sent a magic link to <strong>{email}</strong>. Click the link
-              to complete your signup — no password needed.
+              We sent a verification link to <strong>{email}</strong>. Click the link
+              in your email to confirm your account and log in.
             </p>
           </div>
         </div>
@@ -62,6 +63,26 @@ export default function SignupPage() {
             </div>
           </div>
 
+          <div className="auth-field">
+            <label htmlFor="password" className="auth-label">
+              Password (at least 6 characters)
+            </label>
+            <div className="auth-input-wrapper">
+              <Lock size={16} className="auth-input-icon" />
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="••••••"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="auth-input"
+              />
+            </div>
+          </div>
+
           {state?.error && (
             <div className="auth-error">
               <AlertCircle size={16} />
@@ -78,12 +99,12 @@ export default function SignupPage() {
             {pending ? (
               <>
                 <Loader2 size={16} className="auth-spinner" />
-                Sending magic link…
+                Registering…
               </>
             ) : (
               <>
-                <Mail size={16} />
-                Continue with Email
+                <Bot size={16} />
+                Sign Up
               </>
             )}
           </button>

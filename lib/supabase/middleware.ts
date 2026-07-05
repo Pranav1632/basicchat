@@ -30,6 +30,29 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (user) {
+    const sessionCookie = request.cookies.get("session_login_time");
+    if (!sessionCookie) {
+      supabaseResponse.cookies.set("session_login_time", String(Date.now()), {
+        maxAge: 2 * 24 * 60 * 60, // 2 days
+        path: "/",
+      });
+    } else {
+      const loginTime = Number(sessionCookie.value);
+      const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+      if (Date.now() - loginTime > TWO_DAYS_MS) {
+        await supabase.auth.signOut();
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        const redirectResponse = NextResponse.redirect(url);
+        redirectResponse.cookies.delete("session_login_time");
+        return redirectResponse;
+      }
+    }
+  } else {
+    supabaseResponse.cookies.delete("session_login_time");
+  }
+
   const { pathname } = request.nextUrl;
 
   const protectedPaths = ["/dashboard", "/chat", "/agents", "/settings"];
