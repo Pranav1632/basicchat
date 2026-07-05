@@ -2,8 +2,8 @@
 
 import { useChat } from "ai/react";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { fetchChatMessages } from "@/actions/chat";
+import { useSearchParams, useRouter } from "next/navigation";
+import { fetchChatMessages, fetchUserChats, removeChat } from "@/actions/chat";
 import {
   Send,
   Square,
@@ -20,12 +20,26 @@ import Link from "next/link";
 
 function ChatPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialChatId = searchParams?.get("id") || "";
   const agentId = searchParams?.get("agentId") || "";
   
   const [activeProvider, setActiveProvider] = useState<string>("gemini-2.5-flash");
   const [chatId, setChatId] = useState<string>(initialChatId);
   const [isInitializing, setIsInitializing] = useState(!!initialChatId);
+  const [chats, setChats] = useState<any[]>([]);
+
+  // Sync state if search parameter changes
+  useEffect(() => {
+    setChatId(initialChatId);
+  }, [initialChatId]);
+
+  // Fetch chat history
+  useEffect(() => {
+    fetchUserChats()
+      .then(setChats)
+      .catch(console.error);
+  }, [chatId]);
 
   const {
     messages,
@@ -47,15 +61,16 @@ function ChatPageContent() {
       const newChatId = response.headers.get("X-Chat-Id");
       if (newChatId && newChatId !== chatId) {
         setChatId(newChatId);
-        window.history.replaceState(null, "", `/chat?id=${newChatId}`);
+        router.replace(`/chat?id=${newChatId}`);
       }
     },
   });
 
   // Load initial messages if opening an existing chat
   useEffect(() => {
-    if (initialChatId) {
-      fetchChatMessages(initialChatId)
+    if (chatId) {
+      setIsInitializing(true);
+      fetchChatMessages(chatId)
         .then((dbMessages) => {
           setMessages(
             dbMessages.map((m) => ({
@@ -67,8 +82,11 @@ function ChatPageContent() {
         })
         .catch(console.error)
         .finally(() => setIsInitializing(false));
+    } else {
+      setMessages([]);
+      setIsInitializing(false);
     }
-  }, [initialChatId, setMessages]);
+  }, [chatId, setMessages]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -262,6 +280,157 @@ function ChatPageContent() {
           </form>
         </div>
       </div>
+
+      {/* Right Sidebar - Chat History */}
+      <aside className="chat-history-sidebar" style={{
+        width: "280px",
+        background: "rgba(15, 15, 24, 0.6)",
+        borderLeft: "1px solid rgba(255, 255, 255, 0.06)",
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        flexShrink: 0,
+      }}>
+        <div style={{
+          padding: "1.5rem",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}>
+          <h3 style={{ fontWeight: "600", fontSize: "1rem", color: "white" }}>Chat History</h3>
+          <button
+            onClick={() => {
+              router.push("/chat");
+            }}
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "6px",
+              padding: "0.4rem 0.8rem",
+              fontSize: "0.8rem",
+              fontWeight: "500",
+              cursor: "pointer",
+              transition: "background 0.2s",
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.12)"}
+            onMouseOut={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+          >
+            New Chat
+          </button>
+        </div>
+
+        <div style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "1rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.5rem",
+        }}>
+          {chats.length === 0 ? (
+            <div style={{
+              textAlign: "center",
+              color: "rgba(255,255,255,0.4)",
+              fontSize: "0.85rem",
+              padding: "2rem 0",
+            }}>
+              No recent chats
+            </div>
+          ) : (
+            chats.map((c) => {
+              const isActive = c.id === chatId;
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => router.push(`/chat?id=${c.id}`)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0.75rem",
+                    borderRadius: "8px",
+                    background: isActive ? "rgba(124, 111, 255, 0.15)" : "transparent",
+                    border: isActive ? "1px solid rgba(124, 111, 255, 0.3)" : "1px solid transparent",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    position: "relative",
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                  }}
+                  onMouseOut={(e) => {
+                    if (!isActive) e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    overflow: "hidden",
+                    marginRight: "1rem",
+                    flex: 1,
+                  }}>
+                    <div style={{
+                      minWidth: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: isActive ? "#7c6fff" : "rgba(255,255,255,0.2)",
+                    }} />
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <p style={{
+                        fontSize: "0.85rem",
+                        fontWeight: isActive ? "600" : "400",
+                        color: isActive ? "white" : "rgba(255,255,255,0.8)",
+                        margin: 0,
+                      }}>
+                        {c.title || "Untitled Chat"}
+                      </p>
+                      <span style={{
+                        fontSize: "0.7rem",
+                        color: "rgba(255,255,255,0.4)",
+                      }}>
+                        {c.agent?.name || "AI Assistant"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (confirm("Delete this chat?")) {
+                        await removeChat(c.id);
+                        if (c.id === chatId) {
+                          router.push("/chat");
+                        } else {
+                          const updated = await fetchUserChats();
+                          setChats(updated);
+                        }
+                      }
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "rgba(255,100,100,0.6)",
+                      cursor: "pointer",
+                      padding: "0.25rem",
+                      borderRadius: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.color = "rgba(255,100,100,1)"}
+                    onMouseOut={(e) => e.currentTarget.style.color = "rgba(255,100,100,0.6)"}
+                  >
+                    <svg style={{ width: 14, height: 14 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </aside>
     </div>
   );
 }

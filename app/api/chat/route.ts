@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     }
 
     let system = systemPrompt ?? DEFAULT_SYSTEM;
-    let model = "gemini-2.0-flash-lite"; // default
+    let model = "gemini-2.5-flash"; // default
 
     let currentChatId = chatId;
     let currentAgent = null;
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       if (!currentAgent) {
         currentAgent = await createAgent(user.id, {
           name: "AI Assistant",
-          model: "gemini-2.0-flash-lite",
+          model: "gemini-2.5-flash",
           system_prompt: system,
           temperature: 0.7,
           description: "Default AI Assistant",

@@ -426,7 +426,7 @@ export async function getDashboardStats(userId: string) {
         .eq("user_id", userId),
       supabase
         .from("messages")
-        .select("messages.id", { count: "exact", head: true })
+        .select("id, chats!inner(user_id)", { count: "exact", head: true })
         .eq("chats.user_id", userId),
     ]);
 

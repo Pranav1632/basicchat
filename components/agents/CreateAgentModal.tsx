@@ -126,8 +126,8 @@ export default function CreateAgentModal() {
                     appearance: "none"
                   }}
                 >
-                  <option value="gemini-2.0-flash-lite" style={{ background: "#121212" }}>Gemini 2.0 Flash Lite</option>
                   <option value="gemini-2.5-flash" style={{ background: "#121212" }}>Gemini 2.5 Flash</option>
+                  <option value="gemini-2.0-flash-lite" style={{ background: "#121212" }}>Gemini 2.0 Flash Lite</option>
                   <option value="gemini-2.5-pro" style={{ background: "#121212" }}>Gemini 2.5 Pro</option>
                 </select>
               </div>

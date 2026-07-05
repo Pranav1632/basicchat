@@ -6,8 +6,20 @@ import { tools } from "./tools";
 
 // ─── Model factory functions ──────────────────────────────────
 function makeGeminiModel(modelName?: string) {
+  let targetModel = modelName || "gemini-2.5-flash";
+  // Fall back to gemini-2.5-flash if the requested model is hitting quota limits (lite/pro) or is an old Nvidia model
+  if (
+    targetModel === "gemini-2.0-flash-lite" ||
+    targetModel === "gemini-2.5-pro" ||
+    targetModel.includes("llama") ||
+    targetModel.includes("nvidia") ||
+    targetModel.includes("gemma")
+  ) {
+    targetModel = "gemini-2.5-flash";
+  }
+
   return new ChatGoogleGenerativeAI({
-    model: modelName || "gemini-2.0-flash-lite", // Quota-friendly, confirmed available, works with tools
+    model: targetModel,
     apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
     temperature: 0.7,
     maxRetries: 0,
