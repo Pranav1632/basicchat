@@ -1,17 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getDashboardStats } from "@/lib/supabase/db";
-import { signOut } from "@/actions/auth";
-import {
-  Bot,
-  MessageSquare,
-  Settings,
-  LogOut,
-  Zap,
-  ChevronRight,
-  Plus,
-} from "lucide-react";
+import { ChevronRight, Plus, MessageSquare } from "lucide-react";
 import Link from "next/link";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -36,56 +28,12 @@ export default async function DashboardPage() {
   const stats = await getDashboardStats(user.id);
 
   return (
-    <div className="dashboard-layout">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <Bot size={22} />
-            <span>AgentA</span>
-          </div>
-        </div>
-
-        <nav className="sidebar-nav">
-          <Link href="/dashboard" className="sidebar-item active" id="nav-dashboard">
-            <Zap size={18} />
-            <span>Dashboard</span>
-          </Link>
-          <Link href="/chat" className="sidebar-item" id="nav-chat">
-            <MessageSquare size={18} />
-            <span>Chats</span>
-          </Link>
-          <Link href="/agents" className="sidebar-item" id="nav-agents">
-            <Bot size={18} />
-            <span>Agents</span>
-          </Link>
-          <Link href="/settings" className="sidebar-item" id="nav-settings">
-            <Settings size={18} />
-            <span>Settings</span>
-          </Link>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="sidebar-avatar">{initials}</div>
-            <div className="sidebar-user-info">
-              <p className="sidebar-user-name">{displayName}</p>
-              <p className="sidebar-user-email">{user.email}</p>
-            </div>
-          </div>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="sidebar-logout"
-              id="logout-btn"
-              title="Sign out"
-            >
-              <LogOut size={18} />
-            </button>
-          </form>
-        </div>
-      </aside>
-
+    <DashboardLayout
+      activeTab="dashboard"
+      initials={initials}
+      displayName={displayName}
+      email={user.email || ""}
+    >
       {/* Main content */}
       <main className="dashboard-main">
         {/* Top bar */}
@@ -151,6 +99,6 @@ export default async function DashboardPage() {
           </div>
         </section>
       </main>
-    </div>
+    </DashboardLayout>
   );
 }

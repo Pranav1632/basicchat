@@ -1789,3 +1789,18 @@
     display: flex; /* Show close button on mobile sidebar */
   }
 }
+
+.mobile-only-header {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-only-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(15, 15, 24, 0.95);
+  }
+}

@@ -1,14 +1,27 @@
 "use client";
 
-import { Bot, Trash2, Settings, Zap, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bot, Trash2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { fetchUserAgents, removeAgent } from "@/actions/agent";
 import CreateAgentModal from "@/components/agents/CreateAgentModal";
 import EditAgentModal from "@/components/agents/EditAgentModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function AgentsPage() {
   const queryClient = useQueryClient();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUser(user);
+      }
+    });
+  }, []);
 
   // Query for user agents list
   const { data: agents = [], isLoading } = useQuery({
@@ -29,36 +42,25 @@ export default function AgentsPage() {
     }
   });
 
-  return (
-    <div className="dashboard-layout">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <Bot size={22} />
-            <span>AgentA</span>
-          </div>
-        </div>
-        <nav className="sidebar-nav">
-          <Link href="/dashboard" className="sidebar-item">
-            <Zap size={18} />
-            <span>Dashboard</span>
-          </Link>
-          <Link href="/chat" className="sidebar-item">
-            <Bot size={18} />
-            <span>Chats</span>
-          </Link>
-          <Link href="/agents" className="sidebar-item active">
-            <Bot size={18} />
-            <span>Agents</span>
-          </Link>
-          <Link href="/settings" className="sidebar-item">
-            <Settings size={18} />
-            <span>Settings</span>
-          </Link>
-        </nav>
-      </aside>
+  const displayName =
+    user?.user_metadata?.full_name ??
+    user?.email?.split("@")[0] ??
+    "User";
 
+  const initials = displayName
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  return (
+    <DashboardLayout
+      activeTab="agents"
+      initials={initials}
+      displayName={displayName}
+      email={user?.email || ""}
+    >
       {/* Main Content */}
       <main className="dashboard-main" style={{ padding: "2rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
@@ -144,6 +146,6 @@ export default function AgentsPage() {
           </div>
         )}
       </main>
-    </div>
+    </DashboardLayout>
   );
 }
