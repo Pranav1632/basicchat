@@ -1668,3 +1668,124 @@
   background: rgba(255, 255, 255, 0.06);
   color: var(--foreground);
 }
+
+/* ─── Responsive Sidebars Mobile Styling ──────────────────────── */
+
+/* Overlay */
+.sidebar-overlay,
+.history-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 99;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.open,
+.history-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Header Action Buttons */
+.mobile-header-btn {
+  display: none; /* Hidden on desktop */
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.mobile-header-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-close-btn,
+.history-close-btn {
+  display: none; /* Hidden on desktop */
+}
+
+/* Base Desktop rules for Right Sidebar style */
+.chat-history-sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: rgba(15, 15, 24, 0.6);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  flex-shrink: 0;
+}
+
+/* Responsive Media Queries */
+@media (max-width: 1024px) {
+  /* Hide right history sidebar by default, slide in when toggled */
+  .chat-history-sidebar {
+    position: fixed;
+    top: 0;
+    right: -280px;
+    z-index: 100;
+    width: 280px;
+    min-width: 280px;
+    height: 100vh;
+    background: #0f0f18;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -10px 0 35px rgba(0, 0, 0, 0.6);
+  }
+
+  .chat-history-sidebar.open {
+    right: 0;
+  }
+
+  .mobile-header-btn.history-btn {
+    display: flex; /* Show on mobile/tablet */
+  }
+
+  .history-close-btn {
+    display: flex; /* Show close button on mobile history */
+  }
+}
+
+@media (max-width: 768px) {
+  /* Hide left navigation sidebar by default, slide in when toggled */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -240px;
+    z-index: 100;
+    width: 240px;
+    min-width: 240px;
+    height: 100vh;
+    background: #0b0b12;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 10px 0 35px rgba(0, 0, 0, 0.6);
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .mobile-header-btn.hamburger-btn {
+    display: flex; /* Show on mobile */
+  }
+
+  .sidebar-close-btn {
+    display: flex; /* Show close button on mobile sidebar */
+  }
+}

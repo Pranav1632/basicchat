@@ -14,6 +14,9 @@ import {
   MessageSquare,
   Settings,
   LogOut,
+  Menu,
+  History,
+  X,
 } from "lucide-react";
 import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
 import TypingIndicator from "@/components/chat/TypingIndicator";
@@ -28,10 +31,14 @@ function ChatPageContent() {
   
   const [activeProvider, setActiveProvider] = useState<string>("gemini-2.5-flash");
   const [chatId, setChatId] = useState<string>(initialChatId);
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // Sync state if search parameter changes
   useEffect(() => {
     setChatId(initialChatId);
+    setIsLeftSidebarOpen(false);
+    setIsHistoryOpen(false);
   }, [initialChatId]);
 
   // Query for chat history list
@@ -150,13 +157,36 @@ function ChatPageContent() {
 
   return (
     <div className="dashboard-layout">
+      {/* Sidebar Overlay (Mobile) */}
+      <div 
+        className={`sidebar-overlay ${isLeftSidebarOpen ? "open" : ""}`}
+        onClick={() => setIsLeftSidebarOpen(false)}
+      />
+
       {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
+      <aside className={`sidebar ${isLeftSidebarOpen ? "open" : ""}`}>
+        <div className="sidebar-header" style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}>
           <div className="sidebar-logo">
             <Bot size={22} />
             <span>AgentA</span>
           </div>
+          <button
+            onClick={() => setIsLeftSidebarOpen(false)}
+            className="sidebar-close-btn"
+            style={{
+              background: "none",
+              border: "none",
+              color: "rgba(255, 255, 255, 0.4)",
+              cursor: "pointer",
+              padding: "0.25rem",
+            }}
+          >
+            <X size={18} />
+          </button>
         </div>
         <nav className="sidebar-nav">
           <Link href="/dashboard" className="sidebar-item" id="nav-dashboard">
@@ -188,7 +218,14 @@ function ChatPageContent() {
       <div className="chat-layout">
         {/* Chat header */}
         <header className="chat-top-bar">
-          <div className="chat-top-info">
+          <div className="chat-top-info" style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+            <button
+              onClick={() => setIsLeftSidebarOpen(true)}
+              className="mobile-header-btn hamburger-btn"
+              title="Open menu"
+            >
+              <Menu size={20} />
+            </button>
             <div className="chat-agent-dot" />
             <span className="chat-agent-name">AI Assistant</span>
             <span
@@ -198,6 +235,13 @@ function ChatPageContent() {
               {activeProvider}
             </span>
           </div>
+          <button
+            onClick={() => setIsHistoryOpen(true)}
+            className="mobile-header-btn history-btn"
+            title="Open history"
+          >
+            <History size={20} />
+          </button>
         </header>
 
         {/* Messages */}
@@ -321,16 +365,14 @@ function ChatPageContent() {
         </div>
       </div>
 
+      {/* History Overlay (Mobile) */}
+      <div 
+        className={`history-overlay ${isHistoryOpen ? "open" : ""}`}
+        onClick={() => setIsHistoryOpen(false)}
+      />
+
       {/* Right Sidebar - Chat History */}
-      <aside className="chat-history-sidebar" style={{
-        width: "280px",
-        background: "rgba(15, 15, 24, 0.6)",
-        borderLeft: "1px solid rgba(255, 255, 255, 0.06)",
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        flexShrink: 0,
-      }}>
+      <aside className={`chat-history-sidebar ${isHistoryOpen ? "open" : ""}`}>
         <div style={{
           padding: "1.5rem",
           borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
@@ -339,30 +381,45 @@ function ChatPageContent() {
           alignItems: "center",
         }}>
           <h3 style={{ fontWeight: "600", fontSize: "1rem", color: "white" }}>Chat History</h3>
-          <button
-            onClick={() => {
-              if (activeAgentId) {
-                router.push(`/chat?agentId=${activeAgentId}`);
-              } else {
-                router.push("/chat");
-              }
-            }}
-            style={{
-              background: "rgba(255,255,255,0.06)",
-              color: "white",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "6px",
-              padding: "0.4rem 0.8rem",
-              fontSize: "0.8rem",
-              fontWeight: "500",
-              cursor: "pointer",
-              transition: "background 0.2s",
-            }}
-            onMouseOver={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.12)"}
-            onMouseOut={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
-          >
-            New Chat
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <button
+              onClick={() => {
+                if (activeAgentId) {
+                  router.push(`/chat?agentId=${activeAgentId}`);
+                } else {
+                  router.push("/chat");
+                }
+              }}
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                color: "white",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "6px",
+                padding: "0.4rem 0.8rem",
+                fontSize: "0.8rem",
+                fontWeight: "500",
+                cursor: "pointer",
+                transition: "background 0.2s",
+              }}
+              onMouseOver={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.12)"}
+              onMouseOut={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+            >
+              New Chat
+            </button>
+            <button
+              onClick={() => setIsHistoryOpen(false)}
+              className="history-close-btn"
+              style={{
+                background: "none",
+                border: "none",
+                color: "rgba(255, 255, 255, 0.4)",
+                cursor: "pointer",
+                padding: "0.25rem",
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div style={{
