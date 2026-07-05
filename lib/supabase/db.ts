@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { UserProfile, Agent, Chat, DbMessage, Document } from "@/types";
+import type { UserProfile, Agent, Chat, DbMessage, Document, UserMemory } from "@/types";
 
 // ─── Users ────────────────────────────────────────────────────
 
@@ -475,12 +475,12 @@ export async function updateChatSummary(
   }
 }
 
-export async function getUserMemories(userId: string): Promise<string[]> {
+export async function getUserMemories(userId: string): Promise<UserMemory[]> {
   try {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("user_memories")
-      .select("memory")
+      .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -488,27 +488,141 @@ export async function getUserMemories(userId: string): Promise<string[]> {
       console.error("Supabase error in getUserMemories:", error);
       return [];
     }
-    return (data || []).map((m: any) => m.memory);
+    return (data || []) as UserMemory[];
   } catch (error) {
     console.error("Unexpected error in getUserMemories:", error);
     return [];
   }
 }
 
-export async function addUserMemory(userId: string, memoryText: string): Promise<boolean> {
+export async function addUserMemory(
+  userId: string,
+  memory: Omit<UserMemory, "id" | "user_id" | "created_at" | "updated_at">
+): Promise<UserMemory | null> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("user_memories")
+      .insert({ ...memory, user_id: userId })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Supabase error in addUserMemory:", error);
+      return null;
+    }
+    return data as UserMemory;
+  } catch (error) {
+    console.error("Unexpected error in addUserMemory:", error);
+    return null;
+  }
+}
+
+export async function saveOrUpdateUserMemory(
+  userId: string,
+  category: string,
+  key: string,
+  value: string,
+  confidence = 1.0,
+  source = "chat"
+): Promise<UserMemory | null> {
+  try {
+    const supabase = await createClient();
+    
+    // Check if key already exists for this user in this category
+    const { data: existing } = await supabase
+      .from("user_memories")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("category", category)
+      .eq("key", key)
+      .maybeSingle();
+
+    if (existing) {
+      const { data, error } = await supabase
+        .from("user_memories")
+        .update({ value, confidence, source })
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (error) {
+        console.error("Supabase error updating user memory:", error);
+        return null;
+      }
+      return data as UserMemory;
+    } else {
+      const { data, error } = await supabase
+        .from("user_memories")
+        .insert({
+          user_id: userId,
+          category,
+          key,
+          value,
+          confidence,
+          source,
+        })
+        .select()
+        .single();
+      if (error) {
+        console.error("Supabase error inserting user memory:", error);
+        return null;
+      }
+      return data as UserMemory;
+    }
+  } catch (error) {
+    console.error("Unexpected error in saveOrUpdateUserMemory:", error);
+    return null;
+  }
+}
+
+export async function deleteUserMemory(userId: string, category: string, key: string): Promise<boolean> {
   try {
     const supabase = await createClient();
     const { error } = await supabase
       .from("user_memories")
-      .insert({ user_id: userId, memory: memoryText });
+      .delete()
+      .eq("user_id", userId)
+      .eq("category", category)
+      .eq("key", key);
 
     if (error) {
-      console.error("Supabase error in addUserMemory:", error);
+      console.error("Supabase error in deleteUserMemory:", error);
       return false;
     }
     return true;
   } catch (error) {
-    console.error("Unexpected error in addUserMemory:", error);
+    console.error("Unexpected error in deleteUserMemory:", error);
     return false;
+  }
+}
+
+// Retrieve relevant memories based on query keyword matching (semantic proxy)
+export async function searchUserMemories(userId: string, query: string): Promise<UserMemory[]> {
+  try {
+    const memories = await getUserMemories(userId);
+    if (!memories || memories.length === 0) return [];
+    
+    const queryTokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+    if (queryTokens.length === 0) return memories.slice(0, 5); // Return most recent as fallback
+
+    // Calculate match scores
+    const scored = memories.map(m => {
+      let score = 0;
+      const textToSearch = `${m.category} ${m.key} ${m.value}`.toLowerCase();
+      queryTokens.forEach(token => {
+        if (textToSearch.includes(token)) {
+          score += 1;
+        }
+      });
+      return { memory: m, score };
+    });
+
+    // Filter to matches or return top 5 recent if no specific query matched
+    const matches = scored.filter(s => s.score > 0).sort((a, b) => b.score - a.score).map(s => s.memory);
+    if (matches.length > 0) return matches.slice(0, 5);
+    return memories.slice(0, 5);
+  } catch (error) {
+    console.error("Error searching user memories:", error);
+    return [];
   }
 }

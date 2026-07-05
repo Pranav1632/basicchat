@@ -83,3 +83,15 @@ export interface CreateChatInput {
   agent_id: string;
   title?: string;
 }
+
+export interface UserMemory {
+  id: string;
+  user_id: string;
+  category: string;
+  key: string;
+  value: string;
+  confidence?: number;
+  source?: string;
+  created_at: string;
+  updated_at: string;
+}

@@ -45,11 +45,12 @@ async function callModel(
   let fullSystemPrompt = systemPrompt;
   if (userId) {
     try {
-      const { getUserMemories } = await import("../supabase/db");
-      const memories = await getUserMemories(userId);
+      const { searchUserMemories } = await import("../supabase/db");
+      const lastUserMsg = messages[messages.length - 1]?.content?.toString() || "";
+      const memories = await searchUserMemories(userId, lastUserMsg);
       if (memories && memories.length > 0) {
-        fullSystemPrompt += "\n\nHere are things you remember about the user (Long-Term Memory):\n" + 
-          memories.map((m) => `- ${m}`).join("\n");
+        fullSystemPrompt += "\n\nRelevant things you remember about the user (Long-Term Memory):\n" + 
+          memories.map((m) => `- [${m.category}] ${m.key}: ${m.value}`).join("\n");
       }
     } catch (e) {
       console.error("Failed to load user memories:", e);

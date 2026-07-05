@@ -69,23 +69,26 @@ export const databaseStatsTool = tool(
 );
 
 export const saveUserFactTool = tool(
-  async ({ fact }, config) => {
+  async ({ category, key, value }, config) => {
     const userId = config?.configurable?.userId;
     if (!userId) return "Error: User ID not provided in system configuration.";
     
-    const { addUserMemory } = await import("../supabase/db");
-    const success = await addUserMemory(userId, fact);
-    if (!success) return "Error: Failed to save fact to long-term memory.";
+    const { saveOrUpdateUserMemory } = await import("../supabase/db");
+    const result = await saveOrUpdateUserMemory(userId, category, key, value);
+    if (!result) return "Error: Failed to save fact to long-term memory.";
     
-    return `Successfully remembered fact: "${fact}"`;
+    return `Successfully remembered user profile fact: [${category}] ${key} = ${value}`;
   },
   {
     name: "save_user_fact",
-    description: "Saves a permanent fact or preference about the user to their long-term memory across chats (e.g. name, coding interests, preferred frameworks). Use this when the user mentions something personal about themselves or their preferred tech stack.",
+    description: "Saves a permanent fact, habit, profile details, or preference about the user to their long-term memory store. Always categorize logically (e.g. 'personal', 'preferences', 'projects', 'communication', 'goals').",
     schema: z.object({
-      fact: z.string().describe("The fact or preference to remember about the user."),
+      category: z.string().describe("Category of the memory (e.g. personal, preferences, projects, communication, goals)."),
+      key: z.string().describe("The specific detail name to remember (e.g. name, favorite_language, job_title)."),
+      value: z.string().describe("The description or detail value of this fact (e.g. 'Pranav', 'TypeScript', 'Software Engineer')."),
     }),
   }
 );
 
 export const tools = [calculatorTool, wikipediaTool, databaseStatsTool, saveUserFactTool];
+

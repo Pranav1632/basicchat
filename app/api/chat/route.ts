@@ -198,14 +198,17 @@ Prompt: "${lastUserMessage.content}"`;
             if (currentChatId && fullAssistantMessage.length > 0) {
               await addMessage(currentChatId, "assistant", fullAssistantMessage);
 
-              // Asynchronously summarize in background if conversation gets long
-              if (messages.length > 5) {
-                (async () => {
-                  try {
-                    const { makeGeminiModel } = await import("@/lib/ai/graph");
-                    const { getChat, updateChatSummary } = await import("@/lib/supabase/db");
-                    const chat = await getChat(currentChatId);
-                    if (chat && chat.messages && chat.messages.length > 5) {
+              // 4. Background tasks: Short-term summarizer & Long-term memory extraction
+              (async () => {
+                try {
+                  const { makeGeminiModel } = await import("@/lib/ai/graph");
+                  const { getChat, updateChatSummary, saveOrUpdateUserMemory } = await import("@/lib/supabase/db");
+                  const chat = await getChat(currentChatId);
+                  if (!chat || !chat.messages) return;
+
+                  // A. Summarize conversation if history grows
+                  if (chat.messages.length > 5) {
+                    try {
                       const summaryModel = makeGeminiModel("gemini-2.5-flash");
                       let promptPrompt = "Summarize the following conversation history concisely in 2-3 sentences. Focus on the main topics discussed and key facts shared.";
                       if (chat.summary) {
@@ -215,17 +218,56 @@ Prompt: "${lastUserMessage.content}"`;
                         .map((m) => `${m.role === "user" ? "User" : "AI"}: ${m.content}`)
                         .join("\n");
                       
-                      const fullPrompt = `${promptPrompt}\n\nMessages:\n${chatContent}`;
                       const { HumanMessage } = await import("@langchain/core/messages");
-                      const response = await summaryModel.invoke([new HumanMessage(fullPrompt)]);
+                      const response = await summaryModel.invoke([new HumanMessage(`${promptPrompt}\n\nMessages:\n${chatContent}`)]);
                       const newSummary = response.content.toString().trim();
                       await updateChatSummary(currentChatId, newSummary);
+                    } catch (e) {
+                      console.error("[AI Summarizer] Error:", e);
+                    }
+                  }
+
+                  // B. Intelligent Long-Term Memory Extraction (Step 8 & 9)
+                  try {
+                    const lastTwo = chat.messages.slice(-2);
+                    if (lastTwo.length === 2) {
+                      const extractorModel = makeGeminiModel("gemini-2.5-flash");
+                      const extractionPrompt = `You are a memory extraction engine. Analyze the following conversation turn to see if the user shared personal profile details, habits, preferences, tech stacks, or goals that are worth remembering for future sessions.
+                      
+Do NOT extract calculations, greetings, casual jokes, or one-time temporary questions.
+
+Output must be in JSON format:
+{
+  "decision": "SAVE" | "IGNORE",
+  "category": "personal" | "preferences" | "projects" | "communication" | "goals",
+  "key": "camelCaseNameOfFact",
+  "value": "Description of the fact to remember"
+}
+
+Conversation:
+User: "${lastTwo[0].content}"
+Assistant: "${lastTwo[1].content}"
+
+JSON Output:`;
+
+                      const { HumanMessage } = await import("@langchain/core/messages");
+                      const response = await extractorModel.invoke([new HumanMessage(extractionPrompt)]);
+                      const cleanText = response.content.toString().trim().replace(/```json|```/g, "");
+                      const parsed = JSON.parse(cleanText);
+                      
+                      if (parsed.decision === "SAVE" && parsed.category && parsed.key && parsed.value) {
+                        await saveOrUpdateUserMemory(user.id, parsed.category, parsed.key, parsed.value);
+                        console.log(`[Memory Extraction] Saved memory: [${parsed.category}] ${parsed.key} = ${parsed.value}`);
+                      }
                     }
                   } catch (e) {
-                    console.error("[AI Summarizer] Failed to summarize:", e);
+                    console.error("[Memory Extraction] Error:", e);
                   }
-                })();
-              }
+
+                } catch (e) {
+                  console.error("[Background Tasks] Error:", e);
+                }
+              })();
             }
             controller.close();
           }
