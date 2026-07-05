@@ -33,6 +33,33 @@ function extractTextContent(content: unknown): string {
   return "";
 }
 
+async function callModelWithRetry(model: any, messages: any[], retries = 3, delay = 2000): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await model.invoke(messages);
+    } catch (err: any) {
+      const isRateLimit = err?.status === 429 || err?.message?.includes("429") || err?.toString()?.includes("429");
+      if (isRateLimit && i < retries - 1) {
+        let waitMs = delay;
+        if (err?.errorDetails) {
+          const retryInfo = err.errorDetails.find((d: any) => d?.retryDelay || d?.["@type"]?.includes("RetryInfo"));
+          if (retryInfo?.retryDelay) {
+            const seconds = parseInt(retryInfo.retryDelay);
+            if (!isNaN(seconds)) {
+              waitMs = (seconds + 1) * 1000;
+            }
+          }
+        }
+        console.log(`[AI Quota Retry] Hit 429. Waiting ${waitMs}ms before retry... (Attempt ${i + 1}/${retries})`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        delay *= 2;
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
@@ -106,21 +133,27 @@ export async function POST(req: Request) {
     // Auto-name chat in background if it's a new chat
     if (isNewChat && currentChatId && lastUserMessage?.content) {
       (async () => {
+        const { updateChatTitle } = await import("@/lib/supabase/db");
         try {
           const { makeGeminiModel } = await import("@/lib/ai/graph");
-          const { updateChatTitle } = await import("@/lib/supabase/db");
           const { HumanMessage } = await import("@langchain/core/messages");
           const titleModel = makeGeminiModel("gemini-2.5-flash");
           const prompt = `Create a short, 3-5 word title for a conversation that starts with the following prompt. Do not use quotes, punctuation, or markdown. Output ONLY the title itself.
           
 Prompt: "${lastUserMessage.content}"`;
-          const response = await titleModel.invoke([new HumanMessage(prompt)]);
+          const response = await callModelWithRetry(titleModel, [new HumanMessage(prompt)], 2, 1000);
           const generatedTitle = response.content.toString().trim().replace(/^["']|["']$/g, "");
           if (generatedTitle && generatedTitle.length > 0) {
             await updateChatTitle(currentChatId, generatedTitle);
           }
         } catch (e) {
-          console.error("[AI Auto-Name] Failed to generate title:", e);
+          console.error("[AI Auto-Name] Failed to generate title, falling back to first 4 words:", e);
+          let fallbackTitle = lastUserMessage.content.split(/\s+/).slice(0, 4).join(" ");
+          if (fallbackTitle.length > 30) {
+            fallbackTitle = fallbackTitle.substring(0, 30) + "...";
+          }
+          if (!fallbackTitle) fallbackTitle = "New Chat";
+          await updateChatTitle(currentChatId, fallbackTitle);
         }
       })();
     }
@@ -162,6 +195,7 @@ Prompt: "${lastUserMessage.content}"`;
             model,
             userId: user.id,
             chatId: currentChatId,
+            agentId: currentAgent?.id || null,
           },
         }
       );
@@ -219,7 +253,12 @@ Prompt: "${lastUserMessage.content}"`;
                         .join("\n");
                       
                       const { HumanMessage } = await import("@langchain/core/messages");
-                      const response = await summaryModel.invoke([new HumanMessage(`${promptPrompt}\n\nMessages:\n${chatContent}`)]);
+                      const response = await callModelWithRetry(
+                        summaryModel,
+                        [new HumanMessage(`${promptPrompt}\n\nMessages:\n${chatContent}`)],
+                        2,
+                        1000
+                      );
                       const newSummary = response.content.toString().trim();
                       await updateChatSummary(currentChatId, newSummary);
                     } catch (e) {
@@ -231,9 +270,20 @@ Prompt: "${lastUserMessage.content}"`;
                   try {
                     const lastTwo = chat.messages.slice(-2);
                     if (lastTwo.length === 2) {
-                      const extractorModel = makeGeminiModel("gemini-2.5-flash");
-                      const extractionPrompt = `You are a memory extraction engine. Analyze the following conversation turn to see if the user shared personal profile details, habits, preferences, tech stacks, or goals that are worth remembering for future sessions.
+                      const userMsgLower = lastTwo[0].content.toLowerCase();
+                      const memoryKeywords = [
+                        "my name", "i am", "i live", "i work", "my job", "my preference", "i prefer", 
+                        "favorite", "dislike", "my stack", "my framework", "my hobby", "my hobbies", 
+                        "my goal", "my goals", "hobbies", "habit", "remember", "forget", "interest", 
+                        "interests", "tech stack", "languages", "concise", "detailed"
+                      ];
                       
+                      const hasMemoryKeyword = memoryKeywords.some(keyword => userMsgLower.includes(keyword));
+
+                      if (hasMemoryKeyword) {
+                        const extractorModel = makeGeminiModel("gemini-2.5-flash");
+                        const extractionPrompt = `You are a memory extraction engine. Analyze the following conversation turn to see if the user shared personal profile details, habits, preferences, tech stacks, or goals that are worth remembering for future sessions.
+                        
 Do NOT extract calculations, greetings, casual jokes, or one-time temporary questions.
 
 Output must be in JSON format:
@@ -250,14 +300,22 @@ Assistant: "${lastTwo[1].content}"
 
 JSON Output:`;
 
-                      const { HumanMessage } = await import("@langchain/core/messages");
-                      const response = await extractorModel.invoke([new HumanMessage(extractionPrompt)]);
-                      const cleanText = response.content.toString().trim().replace(/```json|```/g, "");
-                      const parsed = JSON.parse(cleanText);
-                      
-                      if (parsed.decision === "SAVE" && parsed.category && parsed.key && parsed.value) {
-                        await saveOrUpdateUserMemory(user.id, parsed.category, parsed.key, parsed.value);
-                        console.log(`[Memory Extraction] Saved memory: [${parsed.category}] ${parsed.key} = ${parsed.value}`);
+                        const { HumanMessage } = await import("@langchain/core/messages");
+                        const response = await callModelWithRetry(
+                          extractorModel,
+                          [new HumanMessage(extractionPrompt)],
+                          2,
+                          1000
+                        );
+                        const cleanText = response.content.toString().trim().replace(/```json|```/g, "");
+                        const parsed = JSON.parse(cleanText);
+                        
+                        if (parsed.decision === "SAVE" && parsed.category && parsed.key && parsed.value) {
+                          await saveOrUpdateUserMemory(user.id, currentAgent?.id || null, parsed.category, parsed.key, parsed.value);
+                          console.log(`[Memory Extraction] Saved memory: [${parsed.category}] ${parsed.key} = ${parsed.value}`);
+                        }
+                      } else {
+                        console.log("[Memory Extraction] No profile memory keywords detected. Skipping extraction API call.");
                       }
                     }
                   } catch (e) {

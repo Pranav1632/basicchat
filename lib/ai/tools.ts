@@ -71,10 +71,11 @@ export const databaseStatsTool = tool(
 export const saveUserFactTool = tool(
   async ({ category, key, value }, config) => {
     const userId = config?.configurable?.userId;
+    const agentId = config?.configurable?.agentId ?? null;
     if (!userId) return "Error: User ID not provided in system configuration.";
     
     const { saveOrUpdateUserMemory } = await import("../supabase/db");
-    const result = await saveOrUpdateUserMemory(userId, category, key, value);
+    const result = await saveOrUpdateUserMemory(userId, agentId, category, key, value);
     if (!result) return "Error: Failed to save fact to long-term memory.";
     
     return `Successfully remembered user profile fact: [${category}] ${key} = ${value}`;

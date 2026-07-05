@@ -475,14 +475,21 @@ export async function updateChatSummary(
   }
 }
 
-export async function getUserMemories(userId: string): Promise<UserMemory[]> {
+export async function getUserMemories(userId: string, agentId?: string | null): Promise<UserMemory[]> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    let queryBuilder = supabase
       .from("user_memories")
       .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+      .eq("user_id", userId);
+
+    if (agentId) {
+      queryBuilder = queryBuilder.eq("agent_id", agentId);
+    } else {
+      queryBuilder = queryBuilder.is("agent_id", null);
+    }
+
+    const { data, error } = await queryBuilder.order("created_at", { ascending: false });
 
     if (error) {
       console.error("Supabase error in getUserMemories:", error);
@@ -520,6 +527,7 @@ export async function addUserMemory(
 
 export async function saveOrUpdateUserMemory(
   userId: string,
+  agentId: string | null,
   category: string,
   key: string,
   value: string,
@@ -529,14 +537,20 @@ export async function saveOrUpdateUserMemory(
   try {
     const supabase = await createClient();
     
-    // Check if key already exists for this user in this category
-    const { data: existing } = await supabase
+    let existingQuery = supabase
       .from("user_memories")
       .select("*")
       .eq("user_id", userId)
       .eq("category", category)
-      .eq("key", key)
-      .maybeSingle();
+      .eq("key", key);
+
+    if (agentId) {
+      existingQuery = existingQuery.eq("agent_id", agentId);
+    } else {
+      existingQuery = existingQuery.is("agent_id", null);
+    }
+
+    const { data: existing } = await existingQuery.maybeSingle();
 
     if (existing) {
       const { data, error } = await supabase
@@ -555,6 +569,7 @@ export async function saveOrUpdateUserMemory(
         .from("user_memories")
         .insert({
           user_id: userId,
+          agent_id: agentId,
           category,
           key,
           value,
@@ -597,9 +612,9 @@ export async function deleteUserMemory(userId: string, category: string, key: st
 }
 
 // Retrieve relevant memories based on query keyword matching (semantic proxy)
-export async function searchUserMemories(userId: string, query: string): Promise<UserMemory[]> {
+export async function searchUserMemories(userId: string, agentId: string | null, query: string): Promise<UserMemory[]> {
   try {
-    const memories = await getUserMemories(userId);
+    const memories = await getUserMemories(userId, agentId);
     if (!memories || memories.length === 0) return [];
     
     const queryTokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);

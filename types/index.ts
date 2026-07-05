@@ -87,6 +87,7 @@ export interface CreateChatInput {
 export interface UserMemory {
   id: string;
   user_id: string;
+  agent_id?: string | null;
   category: string;
   key: string;
   value: string;
