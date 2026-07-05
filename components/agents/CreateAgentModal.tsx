@@ -60,7 +60,7 @@ export default function CreateAgentModal() {
             background: "#121212",
             border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: "16px",
-            width: "100%",
+            width: "calc(100% - 2rem)",
             maxWidth: "500px",
             padding: "1.5rem",
             boxShadow: "0 20px 40px rgba(0,0,0,0.4)"
