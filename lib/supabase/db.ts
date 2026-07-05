@@ -25,7 +25,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 
 export async function updateUserProfile(
   userId: string,
-  updates: Partial<Pick<UserProfile, "name" | "avatar_url">>
+  updates: Partial<Pick<UserProfile, "name" | "avatar_url" | "gemini_api_key">>
 ): Promise<UserProfile | null> {
   try {
     const supabase = await createClient();

@@ -13,6 +13,7 @@ export interface UserProfile {
   name: string | null;
   email: string;
   avatar_url: string | null;
+  gemini_api_key?: string | null;
   created_at: string;
 }
 

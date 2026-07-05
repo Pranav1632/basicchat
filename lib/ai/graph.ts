@@ -5,7 +5,7 @@ import { SystemMessage } from "@langchain/core/messages";
 import { tools } from "./tools";
 
 // ─── Model factory functions ──────────────────────────────────
-export function makeGeminiModel(modelName?: string) {
+export function makeGeminiModel(modelName?: string, userApiKey?: string | null) {
   let targetModel = modelName || "gemini-2.5-flash";
   // Fall back to gemini-2.5-flash if the requested model is hitting quota limits (lite/pro) or is an old Nvidia model
   if (
@@ -18,9 +18,11 @@ export function makeGeminiModel(modelName?: string) {
     targetModel = "gemini-2.5-flash";
   }
 
+  const activeApiKey = userApiKey || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
   return new ChatGoogleGenerativeAI({
     model: targetModel,
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    apiKey: activeApiKey,
     temperature: 0.7,
     maxRetries: 0,
     streaming: true, // Forces streaming chunks
@@ -69,6 +71,7 @@ async function callModel(
   const modelName = config?.configurable?.model;
   const userId = config?.configurable?.userId;
   const agentId = config?.configurable?.agentId ?? null;
+  const userApiKey = config?.configurable?.userApiKey ?? null;
 
   let fullSystemPrompt = systemPrompt;
   if (userId) {
@@ -92,7 +95,7 @@ async function callModel(
     : [new SystemMessage(fullSystemPrompt), ...messages];
 
   try {
-    const gemini = makeGeminiModel(modelName).bindTools(tools);
+    const gemini = makeGeminiModel(modelName, userApiKey).bindTools(tools);
     const response = await invokeModelWithRetry(gemini, fullMessages, 3, 2000);
     return { messages: [response] };
   } catch (err: unknown) {

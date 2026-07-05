@@ -12,6 +12,8 @@ import {
   Calendar,
 } from "lucide-react";
 import Link from "next/link";
+import SettingsForm from "@/components/settings/SettingsForm";
+import { getUserProfile } from "@/lib/supabase/db";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -20,6 +22,9 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  const userProfile = await getUserProfile(user.id);
+  const initialApiKey = userProfile?.gemini_api_key || null;
 
   const displayName =
     user.user_metadata?.full_name ??
@@ -123,6 +128,7 @@ export default async function SettingsPage() {
               </div>
             </div>
           </div>
+          <SettingsForm initialApiKey={initialApiKey} />
         </section>
 
         {/* Danger zone */}

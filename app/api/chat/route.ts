@@ -71,6 +71,10 @@ export async function POST(req: Request) {
       return new Response("Unauthorized", { status: 401 });
     }
 
+    const { getUserProfile } = await import("@/lib/supabase/db");
+    const userProfile = await getUserProfile(user.id);
+    const userApiKey = userProfile?.gemini_api_key || null;
+
     const { messages, systemPrompt, chatId, agentId } = await req.json();
     if (!messages || !Array.isArray(messages)) {
       return new Response("Invalid request: messages array is required", { status: 400 });
@@ -140,7 +144,7 @@ export async function POST(req: Request) {
         try {
           const { makeGeminiModel } = await import("@/lib/ai/graph");
           const { HumanMessage } = await import("@langchain/core/messages");
-          const titleModel = makeGeminiModel("gemini-2.5-flash");
+          const titleModel = makeGeminiModel("gemini-2.5-flash", userApiKey);
           const prompt = `Create a short, 3-5 word title for a conversation that starts with the following prompt. Do not use quotes, punctuation, or markdown. Output ONLY the title itself.
           
 Prompt: "${lastUserMessage.content}"`;
@@ -246,7 +250,7 @@ Prompt: "${lastUserMessage.content}"`;
                   // A. Summarize conversation if history grows
                   if (chat.messages.length > 5) {
                     try {
-                      const summaryModel = makeGeminiModel("gemini-2.5-flash");
+                      const summaryModel = makeGeminiModel("gemini-2.5-flash", userApiKey);
                       let promptPrompt = "Summarize the following conversation history concisely in 2-3 sentences. Focus on the main topics discussed and key facts shared.";
                       if (chat.summary) {
                         promptPrompt += `\nExisting Summary: "${chat.summary}"`;
@@ -284,7 +288,7 @@ Prompt: "${lastUserMessage.content}"`;
                       const hasMemoryKeyword = memoryKeywords.some(keyword => userMsgLower.includes(keyword));
 
                       if (hasMemoryKeyword) {
-                        const extractorModel = makeGeminiModel("gemini-2.5-flash");
+                        const extractorModel = makeGeminiModel("gemini-2.5-flash", userApiKey);
                         const extractionPrompt = `You are a memory extraction engine. Analyze the following conversation turn to see if the user shared personal profile details, habits, preferences, tech stacks, or goals that are worth remembering for future sessions.
                         
 Do NOT extract calculations, greetings, casual jokes, or one-time temporary questions.
