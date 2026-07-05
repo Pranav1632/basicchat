@@ -451,3 +451,64 @@ export async function getDashboardStats(userId: string) {
     };
   }
 }
+
+// ─── Memory Helpers ───────────────────────────────────────────
+
+export async function updateChatSummary(
+  chatId: string,
+  summary: string
+): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("chats")
+      .update({ summary })
+      .eq("id", chatId);
+    if (error) {
+      console.error("Supabase error in updateChatSummary:", error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Unexpected error in updateChatSummary:", error);
+    return false;
+  }
+}
+
+export async function getUserMemories(userId: string): Promise<string[]> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("user_memories")
+      .select("memory")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Supabase error in getUserMemories:", error);
+      return [];
+    }
+    return (data || []).map((m: any) => m.memory);
+  } catch (error) {
+    console.error("Unexpected error in getUserMemories:", error);
+    return [];
+  }
+}
+
+export async function addUserMemory(userId: string, memoryText: string): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("user_memories")
+      .insert({ user_id: userId, memory: memoryText });
+
+    if (error) {
+      console.error("Supabase error in addUserMemory:", error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Unexpected error in addUserMemory:", error);
+    return false;
+  }
+}

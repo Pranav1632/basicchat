@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
-import { createNewAgent } from "@/actions/agent";
+import { Edit2, X, Loader2, Save } from "lucide-react";
+import { updateExistingAgent } from "@/actions/agent";
+import type { Agent } from "@/types";
 import { useQueryClient } from "@tanstack/react-query";
 
-export default function CreateAgentModal() {
+export default function EditAgentModal({ agent, onUpdateSuccess }: { agent: Agent; onUpdateSuccess?: () => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
@@ -13,12 +14,13 @@ export default function CreateAgentModal() {
   async function handleSubmit(formData: FormData) {
     setIsSubmitting(true);
     try {
-      await createNewAgent(formData);
+      await updateExistingAgent(agent.id, formData);
       queryClient.invalidateQueries({ queryKey: ["user-agents"] });
       setIsOpen(false);
+      if (onUpdateSuccess) onUpdateSuccess();
     } catch (error) {
       console.error(error);
-      alert("Failed to create agent");
+      alert("Failed to update agent");
     } finally {
       setIsSubmitting(false);
     }
@@ -29,20 +31,17 @@ export default function CreateAgentModal() {
       <button 
         onClick={() => setIsOpen(true)}
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          background: "white",
-          color: "black",
+          background: "none",
           border: "none",
-          padding: "0.5rem 1rem",
-          borderRadius: "8px",
-          fontWeight: "600",
+          color: "rgba(255,255,255,0.6)",
           cursor: "pointer",
+          padding: "0.25rem",
+          display: "inline-flex",
+          alignItems: "center"
         }}
+        title="Edit Agent"
       >
-        <Plus size={18} />
-        Create Agent
+        <Edit2 size={16} />
       </button>
 
       {isOpen && (
@@ -66,7 +65,7 @@ export default function CreateAgentModal() {
             boxShadow: "0 20px 40px rgba(0,0,0,0.4)"
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-              <h2 style={{ fontSize: "1.25rem", fontWeight: "600" }}>Create New Agent</h2>
+              <h2 style={{ fontSize: "1.25rem", fontWeight: "600", color: "white" }}>Edit Agent</h2>
               <button 
                 onClick={() => setIsOpen(false)}
                 style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer" }}
@@ -81,6 +80,7 @@ export default function CreateAgentModal() {
                 <input 
                   type="text" 
                   name="name" 
+                  defaultValue={agent.name}
                   required 
                   placeholder="e.g., Python Expert" 
                   style={{
@@ -100,6 +100,7 @@ export default function CreateAgentModal() {
                 <input 
                   type="text" 
                   name="description" 
+                  defaultValue={agent.description || ""}
                   placeholder="e.g., Helps debug Python code" 
                   style={{
                     width: "100%",
@@ -118,6 +119,7 @@ export default function CreateAgentModal() {
                 <select 
                   name="model" 
                   required
+                  defaultValue={agent.model}
                   style={{
                     width: "100%",
                     padding: "0.75rem",
@@ -141,6 +143,7 @@ export default function CreateAgentModal() {
                   name="system_prompt" 
                   rows={4}
                   required
+                  defaultValue={agent.system_prompt || ""}
                   placeholder="You are an expert Python developer..."
                   style={{
                     width: "100%",
@@ -159,19 +162,32 @@ export default function CreateAgentModal() {
                 type="submit" 
                 disabled={isSubmitting}
                 style={{
-                  marginTop: "0.5rem",
-                  width: "100%",
-                  padding: "0.75rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
                   background: "white",
                   color: "black",
                   border: "none",
+                  padding: "0.75rem",
                   borderRadius: "8px",
                   fontWeight: "600",
-                  cursor: isSubmitting ? "not-allowed" : "pointer",
-                  opacity: isSubmitting ? 0.7 : 1
+                  cursor: "pointer",
+                  marginTop: "1rem",
+                  transition: "opacity 0.2s"
                 }}
               >
-                {isSubmitting ? "Creating..." : "Create Agent"}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                    Saving Changes...
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    Save Changes
+                  </>
+                )}
               </button>
             </form>
           </div>

@@ -5,7 +5,7 @@ import { SystemMessage } from "@langchain/core/messages";
 import { tools } from "./tools";
 
 // ─── Model factory functions ──────────────────────────────────
-function makeGeminiModel(modelName?: string) {
+export function makeGeminiModel(modelName?: string) {
   let targetModel = modelName || "gemini-2.5-flash";
   // Fall back to gemini-2.5-flash if the requested model is hitting quota limits (lite/pro) or is an old Nvidia model
   if (
@@ -40,12 +40,27 @@ async function callModel(
     config?.configurable?.systemPrompt ??
     "You are a helpful AI assistant. Be concise, clear, and friendly.";
   const modelName = config?.configurable?.model;
+  const userId = config?.configurable?.userId;
+
+  let fullSystemPrompt = systemPrompt;
+  if (userId) {
+    try {
+      const { getUserMemories } = await import("../supabase/db");
+      const memories = await getUserMemories(userId);
+      if (memories && memories.length > 0) {
+        fullSystemPrompt += "\n\nHere are things you remember about the user (Long-Term Memory):\n" + 
+          memories.map((m) => `- ${m}`).join("\n");
+      }
+    } catch (e) {
+      console.error("Failed to load user memories:", e);
+    }
+  }
 
   // Bind tools
   const firstIsSystem = messages[0]?._getType?.() === "system";
   const fullMessages = firstIsSystem
     ? messages
-    : [new SystemMessage(systemPrompt), ...messages];
+    : [new SystemMessage(fullSystemPrompt), ...messages];
 
   try {
     const gemini = makeGeminiModel(modelName).bindTools(tools);

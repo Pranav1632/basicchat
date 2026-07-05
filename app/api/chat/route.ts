@@ -54,9 +54,11 @@ export async function POST(req: Request) {
 
     let currentChatId = chatId;
     let currentAgent = null;
+    let isNewChat = false;
 
     // 1. Create a chat if it doesn't exist
     if (!currentChatId) {
+      isNewChat = true;
       if (agentId) {
         currentAgent = await getAgent(agentId);
       }
@@ -101,10 +103,52 @@ export async function POST(req: Request) {
       await addMessage(currentChatId, "user", lastUserMessage.content);
     }
 
+    // Auto-name chat in background if it's a new chat
+    if (isNewChat && currentChatId && lastUserMessage?.content) {
+      (async () => {
+        try {
+          const { makeGeminiModel } = await import("@/lib/ai/graph");
+          const { updateChatTitle } = await import("@/lib/supabase/db");
+          const { HumanMessage } = await import("@langchain/core/messages");
+          const titleModel = makeGeminiModel("gemini-2.5-flash");
+          const prompt = `Create a short, 3-5 word title for a conversation that starts with the following prompt. Do not use quotes, punctuation, or markdown. Output ONLY the title itself.
+          
+Prompt: "${lastUserMessage.content}"`;
+          const response = await titleModel.invoke([new HumanMessage(prompt)]);
+          const generatedTitle = response.content.toString().trim().replace(/^["']|["']$/g, "");
+          if (generatedTitle && generatedTitle.length > 0) {
+            await updateChatTitle(currentChatId, generatedTitle);
+          }
+        } catch (e) {
+          console.error("[AI Auto-Name] Failed to generate title:", e);
+        }
+      })();
+    }
+
+    // Load existing summary if available
+    let chatSummary = "";
+    if (currentChatId) {
+      try {
+        const { getChat } = await import("@/lib/supabase/db");
+        const chat = await getChat(currentChatId);
+        if (chat?.summary) {
+          chatSummary = chat.summary;
+        }
+      } catch (e) {
+        console.error("Failed to load chat summary:", e);
+      }
+    }
+
+    let systemPromptWithSummary = system;
+    if (chatSummary) {
+      systemPromptWithSummary += `\n\nShort-Term Conversation Summary (earlier messages context):\n${chatSummary}`;
+    }
+
     // Convert Vercel AI SDK messages to LangChain messages.
-    // ⚠️ Do NOT include SystemMessage here — Gemini rejects it in the messages array.
-    // We pass the system prompt via the graph's configurable instead (see graph.ts).
-    const langchainMessages = messages.map((m: { role: string; content: string }) =>
+    // We only pass the last 6 messages to optimize token context, since the summary covers the earlier history.
+    const messageLimit = 6;
+    const recentMessages = messages.slice(-messageLimit);
+    const langchainMessages = recentMessages.map((m: { role: string; content: string }) =>
       m.role === "user" ? new HumanMessage(m.content) : new AIMessage(m.content)
     );
 
@@ -113,7 +157,12 @@ export async function POST(req: Request) {
         { messages: langchainMessages },
         {
           version: "v2",
-          configurable: { systemPrompt: system, model },
+          configurable: { 
+            systemPrompt: systemPromptWithSummary, 
+            model,
+            userId: user.id,
+            chatId: currentChatId,
+          },
         }
       );
 
@@ -148,6 +197,35 @@ export async function POST(req: Request) {
             // 3. Save the final AI response
             if (currentChatId && fullAssistantMessage.length > 0) {
               await addMessage(currentChatId, "assistant", fullAssistantMessage);
+
+              // Asynchronously summarize in background if conversation gets long
+              if (messages.length > 5) {
+                (async () => {
+                  try {
+                    const { makeGeminiModel } = await import("@/lib/ai/graph");
+                    const { getChat, updateChatSummary } = await import("@/lib/supabase/db");
+                    const chat = await getChat(currentChatId);
+                    if (chat && chat.messages && chat.messages.length > 5) {
+                      const summaryModel = makeGeminiModel("gemini-2.5-flash");
+                      let promptPrompt = "Summarize the following conversation history concisely in 2-3 sentences. Focus on the main topics discussed and key facts shared.";
+                      if (chat.summary) {
+                        promptPrompt += `\nExisting Summary: "${chat.summary}"`;
+                      }
+                      const chatContent = chat.messages
+                        .map((m) => `${m.role === "user" ? "User" : "AI"}: ${m.content}`)
+                        .join("\n");
+                      
+                      const fullPrompt = `${promptPrompt}\n\nMessages:\n${chatContent}`;
+                      const { HumanMessage } = await import("@langchain/core/messages");
+                      const response = await summaryModel.invoke([new HumanMessage(fullPrompt)]);
+                      const newSummary = response.content.toString().trim();
+                      await updateChatSummary(currentChatId, newSummary);
+                    }
+                  } catch (e) {
+                    console.error("[AI Summarizer] Failed to summarize:", e);
+                  }
+                })();
+              }
             }
             controller.close();
           }

@@ -1,10 +1,33 @@
-import { Bot, Trash2, Settings, Zap } from "lucide-react";
+"use client";
+
+import { Bot, Trash2, Settings, Zap, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { fetchUserAgents, removeAgent } from "@/actions/agent";
 import CreateAgentModal from "@/components/agents/CreateAgentModal";
+import EditAgentModal from "@/components/agents/EditAgentModal";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-export default async function AgentsPage() {
-  const agents = await fetchUserAgents();
+export default function AgentsPage() {
+  const queryClient = useQueryClient();
+
+  // Query for user agents list
+  const { data: agents = [], isLoading } = useQuery({
+    queryKey: ["user-agents"],
+    queryFn: () => fetchUserAgents(),
+    staleTime: 60000,
+  });
+
+  // Mutation to delete an agent
+  const deleteAgentMutation = useMutation({
+    mutationFn: (id: string) => removeAgent(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-agents"] });
+    },
+    onError: (err) => {
+      console.error(err);
+      alert("Failed to delete agent");
+    }
+  });
 
   return (
     <div className="dashboard-layout">
@@ -46,7 +69,11 @@ export default async function AgentsPage() {
           <CreateAgentModal />
         </div>
 
-        {agents.length === 0 ? (
+        {isLoading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "4rem" }}>
+            <Loader2 size={30} style={{ animation: "spin 1s linear infinite", opacity: 0.5 }} />
+          </div>
+        ) : agents.length === 0 ? (
           <div className="chat-empty" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", padding: "4rem" }}>
             <Bot size={40} style={{ opacity: 0.5, marginBottom: "1rem" }} />
             <h2 className="chat-empty-title">No Agents Yet</h2>
@@ -70,18 +97,25 @@ export default async function AgentsPage() {
                       <Bot size={20} />
                     </div>
                     <div>
-                      <h3 style={{ fontWeight: "600", fontSize: "1.1rem" }}>{agent.name}</h3>
+                      <h3 style={{ fontWeight: "600", fontSize: "1.1rem", color: "white" }}>{agent.name}</h3>
                       <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>{agent.model}</span>
                     </div>
                   </div>
-                  <form action={async () => {
-                    "use server";
-                    await removeAgent(agent.id);
-                  }}>
-                    <button type="submit" style={{ background: "none", border: "none", color: "rgba(255,100,100,0.7)", cursor: "pointer", padding: "0.25rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                    <EditAgentModal agent={agent} />
+                    <button 
+                      onClick={() => {
+                        if (confirm("Are you sure you want to delete this agent?")) {
+                          deleteAgentMutation.mutate(agent.id);
+                        }
+                      }}
+                      disabled={deleteAgentMutation.isPending}
+                      style={{ background: "none", border: "none", color: "rgba(255,100,100,0.7)", cursor: "pointer", padding: "0.25rem" }}
+                      title="Delete Agent"
+                    >
                       <Trash2 size={16} />
                     </button>
-                  </form>
+                  </div>
                 </div>
                 
                 <div style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", flex: 1 }}>

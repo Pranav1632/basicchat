@@ -68,4 +68,24 @@ export const databaseStatsTool = tool(
   }
 );
 
-export const tools = [calculatorTool, wikipediaTool, databaseStatsTool];
+export const saveUserFactTool = tool(
+  async ({ fact }, config) => {
+    const userId = config?.configurable?.userId;
+    if (!userId) return "Error: User ID not provided in system configuration.";
+    
+    const { addUserMemory } = await import("../supabase/db");
+    const success = await addUserMemory(userId, fact);
+    if (!success) return "Error: Failed to save fact to long-term memory.";
+    
+    return `Successfully remembered fact: "${fact}"`;
+  },
+  {
+    name: "save_user_fact",
+    description: "Saves a permanent fact or preference about the user to their long-term memory across chats (e.g. name, coding interests, preferred frameworks). Use this when the user mentions something personal about themselves or their preferred tech stack.",
+    schema: z.object({
+      fact: z.string().describe("The fact or preference to remember about the user."),
+    }),
+  }
+);
+
+export const tools = [calculatorTool, wikipediaTool, databaseStatsTool, saveUserFactTool];

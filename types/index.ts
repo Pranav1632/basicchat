@@ -43,6 +43,7 @@ export interface Chat {
   user_id: string;
   title: string;
   created_at: string;
+  summary?: string | null;
   // joined relations
   agent?: Agent;
   messages?: DbMessage[];

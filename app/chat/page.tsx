@@ -4,6 +4,7 @@ import { useChat } from "ai/react";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { fetchChatMessages, fetchUserChats, removeChat } from "@/actions/chat";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Send,
   Square,
@@ -21,25 +22,45 @@ import Link from "next/link";
 function ChatPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const initialChatId = searchParams?.get("id") || "";
   const agentId = searchParams?.get("agentId") || "";
   
   const [activeProvider, setActiveProvider] = useState<string>("gemini-2.5-flash");
   const [chatId, setChatId] = useState<string>(initialChatId);
-  const [isInitializing, setIsInitializing] = useState(!!initialChatId);
-  const [chats, setChats] = useState<any[]>([]);
 
   // Sync state if search parameter changes
   useEffect(() => {
     setChatId(initialChatId);
   }, [initialChatId]);
 
-  // Fetch chat history
-  useEffect(() => {
-    fetchUserChats()
-      .then(setChats)
-      .catch(console.error);
-  }, [chatId]);
+  // Query for chat history list
+  const { data: chats = [] } = useQuery({
+    queryKey: ["user-chats"],
+    queryFn: () => fetchUserChats(),
+    staleTime: 30000,
+  });
+
+  // Query for active chat messages
+  const { data: dbMessages, isLoading: isFetchingHistory } = useQuery({
+    queryKey: ["chat-messages", chatId],
+    queryFn: () => (chatId ? fetchChatMessages(chatId) : Promise.resolve([])),
+    enabled: !!chatId,
+    staleTime: 60000,
+  });
+
+  // Mutation to delete a chat
+  const deleteChatMutation = useMutation({
+    mutationFn: (id: string) => removeChat(id),
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+      if (deletedId === chatId) {
+        router.push("/chat");
+      }
+    },
+  });
+
+  const isInitializing = chatId ? isFetchingHistory : false;
 
   const {
     messages,
@@ -61,32 +82,26 @@ function ChatPageContent() {
       const newChatId = response.headers.get("X-Chat-Id");
       if (newChatId && newChatId !== chatId) {
         setChatId(newChatId);
+        queryClient.invalidateQueries({ queryKey: ["user-chats"] });
         router.replace(`/chat?id=${newChatId}`);
       }
     },
   });
 
-  // Load initial messages if opening an existing chat
+  // Sync fetched messages history to Vercel AI SDK local state
   useEffect(() => {
-    if (chatId) {
-      setIsInitializing(true);
-      fetchChatMessages(chatId)
-        .then((dbMessages) => {
-          setMessages(
-            dbMessages.map((m) => ({
-              id: m.id,
-              role: m.role as "user" | "assistant",
-              content: m.content,
-            }))
-          );
-        })
-        .catch(console.error)
-        .finally(() => setIsInitializing(false));
-    } else {
+    if (dbMessages) {
+      setMessages(
+        dbMessages.map((m) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }))
+      );
+    } else if (!chatId) {
       setMessages([]);
-      setIsInitializing(false);
     }
-  }, [chatId, setMessages]);
+  }, [dbMessages, chatId, setMessages]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -397,16 +412,10 @@ function ChatPageContent() {
                   </div>
 
                   <button
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.stopPropagation();
                       if (confirm("Delete this chat?")) {
-                        await removeChat(c.id);
-                        if (c.id === chatId) {
-                          router.push("/chat");
-                        } else {
-                          const updated = await fetchUserChats();
-                          setChats(updated);
-                        }
+                        deleteChatMutation.mutate(c.id);
                       }
                     }}
                     style={{
