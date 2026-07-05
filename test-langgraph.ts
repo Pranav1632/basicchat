@@ -1,11 +1,29 @@
-import { graph } from "./lib/ai/graph";
-import { HumanMessage } from "@langchain/core/messages";
+import { readFileSync } from "node:fs";
+
+function loadEnv() {
+  try {
+    const env = readFileSync(".env", "utf8");
+    for (const line of env.split(/\r?\n/)) {
+      if (line.includes("=")) {
+        const [key, ...valueParts] = line.split("=");
+        const value = valueParts.join("=").trim().replace(/^['"]|['"]$/g, "");
+        process.env[key.trim()] = value;
+      }
+    }
+  } catch {
+    // Ignore
+  }
+}
+loadEnv();
 
 async function test() {
+  const { graph } = await import("./lib/ai/graph");
+  const { HumanMessage } = await import("@langchain/core/messages");
+
   console.log("Testing fallback stream events...");
   const stream = await graph.streamEvents(
     { messages: [new HumanMessage("What is 10 divided by 2?")] },
-    { version: "v2", configurable: { provider: "nvidia" } } // Force NVIDIA to test fallback/streaming
+    { version: "v2", configurable: { model: "gemini-2.5-flash" } } // Test Gemini streaming
   );
 
   let chunkCount = 0;
@@ -21,4 +39,7 @@ async function test() {
   console.log(`\n✅ Graph pipeline finished! Chunks received: ${chunkCount}`);
 }
 
-test().catch(e => console.error("❌ Error:", e.message));
+test().catch(e => {
+  console.error("❌ Error:");
+  console.error(e);
+});

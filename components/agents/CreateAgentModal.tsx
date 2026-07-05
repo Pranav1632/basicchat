@@ -127,8 +127,8 @@ export default function CreateAgentModal() {
                   }}
                 >
                   <option value="gemini-2.0-flash-lite" style={{ background: "#121212" }}>Gemini 2.0 Flash Lite</option>
-                  <option value="meta/llama-3.3-70b-instruct" style={{ background: "#121212" }}>Llama 3.3 70B (NVIDIA)</option>
-                  <option value="google/gemma-2-2b-it" style={{ background: "#121212" }}>Gemma 2 2B (NVIDIA)</option>
+                  <option value="gemini-2.5-flash" style={{ background: "#121212" }}>Gemini 2.5 Flash</option>
+                  <option value="gemini-2.5-pro" style={{ background: "#121212" }}>Gemini 2.5 Pro</option>
                 </select>
               </div>
 

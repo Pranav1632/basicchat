@@ -13,7 +13,6 @@ import {
   MessageSquare,
   Settings,
   LogOut,
-  AlertTriangle,
 } from "lucide-react";
 import MarkdownRenderer from "@/components/chat/MarkdownRenderer";
 import TypingIndicator from "@/components/chat/TypingIndicator";
@@ -25,7 +24,6 @@ function ChatPageContent() {
   const agentId = searchParams?.get("agentId") || "";
   
   const [activeProvider, setActiveProvider] = useState<string>("gemini-2.5-flash");
-  const [usedFallback, setUsedFallback] = useState(false);
   const [chatId, setChatId] = useState<string>(initialChatId);
   const [isInitializing, setIsInitializing] = useState(!!initialChatId);
 
@@ -45,7 +43,6 @@ function ChatPageContent() {
       const provider = response.headers.get("X-AI-Provider");
       if (provider) {
         setActiveProvider(provider);
-        setUsedFallback(provider.includes("nvidia") || provider.includes("llama"));
       }
       const newChatId = response.headers.get("X-Chat-Id");
       if (newChatId && newChatId !== chatId) {
@@ -138,10 +135,8 @@ function ChatPageContent() {
             <span className="chat-agent-name">AI Assistant</span>
             <span
               className="chat-model-badge"
-              style={usedFallback ? { background: "rgba(251,146,60,0.12)", color: "#fb923c", borderColor: "rgba(251,146,60,0.3)" } : {}}
-              title={usedFallback ? "Gemini rate limit hit — using NVIDIA fallback" : "Primary model"}
+              title="Active AI Model"
             >
-              {usedFallback && <AlertTriangle size={10} style={{ marginRight: 3 }} />}
               {activeProvider}
             </span>
           </div>

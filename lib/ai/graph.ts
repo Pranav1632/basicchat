@@ -1,29 +1,16 @@
 import { MessagesAnnotation, StateGraph, START, END } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { ChatOpenAI } from "@langchain/openai";
 import { SystemMessage } from "@langchain/core/messages";
 import { tools } from "./tools";
 
 // ─── Model factory functions ──────────────────────────────────
-function makeGeminiModel() {
+function makeGeminiModel(modelName?: string) {
   return new ChatGoogleGenerativeAI({
-    model: "gemini-2.0-flash-lite", // Quota-friendly, confirmed available, works with tools
+    model: modelName || "gemini-2.0-flash-lite", // Quota-friendly, confirmed available, works with tools
     apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
     temperature: 0.7,
     maxRetries: 0,
-    streaming: true, // Forces streaming chunks
-  });
-}
-
-function makeNvidiaModel() {
-  return new ChatOpenAI({
-    model: "meta/llama-3.3-70b-instruct",
-    apiKey: process.env.NVIDIA_API_KEY,          // ✅ correct field name
-    configuration: { baseURL: "https://integrate.api.nvidia.com/v1" },
-    temperature: 0.7,
-    maxRetries: 1,
-    timeout: 60000,
     streaming: true, // Forces streaming chunks
   });
 }
@@ -40,8 +27,7 @@ async function callModel(
   const systemPrompt =
     config?.configurable?.systemPrompt ??
     "You are a helpful AI assistant. Be concise, clear, and friendly.";
-  const provider =
-    config?.configurable?.provider === "nvidia" ? "nvidia" : "gemini";
+  const modelName = config?.configurable?.model;
 
   // Bind tools
   const firstIsSystem = messages[0]?._getType?.() === "system";
@@ -49,34 +35,14 @@ async function callModel(
     ? messages
     : [new SystemMessage(systemPrompt), ...messages];
 
-  const invokeNvidia = async () => makeNvidiaModel().bindTools(tools).invoke(fullMessages);
-
-  // Try Gemini first, fall back to NVIDIA on rate limit / quota error.
-  // If the route already selected an NVIDIA agent, skip Gemini entirely.
-  let response;
-  if (provider === "nvidia") {
-    response = await invokeNvidia();
-    return { messages: [response] };
-  }
-
   try {
-    const gemini = makeGeminiModel().bindTools(tools);
-    response = await gemini.invoke(fullMessages);
+    const gemini = makeGeminiModel(modelName).bindTools(tools);
+    const response = await gemini.invoke(fullMessages);
+    return { messages: [response] };
   } catch (err: unknown) {
-    const error = err as Error & { status?: number };
-    const is429 =
-      error?.status === 429 ||
-      error?.message?.includes("quota") ||
-      error?.message?.includes("rate limit");
-    if (is429) {
-      console.warn("[AI] Gemini rate limit — using NVIDIA llama-3.3-70b fallback");
-      response = await invokeNvidia();
-    } else {
-      throw err;
-    }
+    console.error("[AI] Error calling Gemini model:", err);
+    throw err;
   }
-
-  return { messages: [response!] };
 }
 
 // ─── Routing ──────────────────────────────────────────────────
