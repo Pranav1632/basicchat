@@ -60,8 +60,6 @@ function ChatPageContent() {
     },
   });
 
-  const isInitializing = chatId ? isFetchingHistory : false;
-
   const {
     messages,
     setMessages,
@@ -86,7 +84,13 @@ function ChatPageContent() {
         router.replace(`/chat?id=${newChatId}`);
       }
     },
+    onFinish(message) {
+      // Invalidate to fetch background-generated chat title
+      queryClient.invalidateQueries({ queryKey: ["user-chats"] });
+    },
   });
+
+  const isInitializing = chatId ? (isFetchingHistory && messages.length === 0) : false;
 
   // Sync fetched messages history to Vercel AI SDK local state
   useEffect(() => {
